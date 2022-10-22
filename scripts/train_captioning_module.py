@@ -1,8 +1,6 @@
 import numpy as np
 import sys
-# import tensorboardX as tensorboard
 import torch
-from torch.utils import tensorboard as tensorboard
 from torch.utils.data import DataLoader
 
 from datasets.captioning_dataset import AVSD10Dataset
@@ -12,8 +10,26 @@ from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
 
+import wandb
 
 def train_cap(cfg):
+    if cfg.to_log:
+        wandb.init(
+            project='avsd', 
+            name=cfg.exp_name,
+            config = {
+                'epoch': cfg.epoch_num,
+                'lr': cfg.lr,
+                'bs': cfg.train_batch_size,
+                'd_model_video': cfg.d_model_video,
+                'd_model_audio': cfg.d_model_audio,
+                'd_model_caps': cfg.d_model_caps,
+                'num_layer': cfg.N,
+                'num_head': cfg.H,
+                'optimizer': cfg.optimizer,
+            }
+        )
+
     # doing our best to make it replicable
     torch.manual_seed(0)
     np.random.seed(0)
@@ -23,13 +39,10 @@ def train_cap(cfg):
     # cuda id for training is not 0.
     torch.cuda.set_device(cfg.device_ids[0])
 
-    exp_name = cfg.exp_name
-
+    # data loader
     train_pkl = load_pickle(f'{cfg.feature_dir}/train{"_debug" if cfg.debug else ""}.pkl')
     train_dataset = AVSD10Dataset(cfg, 'train', train_pkl, get_full_feat=False)
     val_dataset = AVSD10Dataset(cfg, 'val', train_pkl, get_full_feat=False)
-    
-    # make sure that DataLoader has batch_size = 1!
     train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate, pin_memory=True)
     val_loader = DataLoader(val_dataset, num_workers=cfg.num_workers, collate_fn=val_dataset.dont_collate)
 
@@ -69,12 +82,6 @@ def train_cap(cfg):
     if cap_model_cpt is not None:
         model.load_state_dict(cap_model_cpt['model_state_dict'])
 
-    if cfg.to_log:
-        TBoard = tensorboard.SummaryWriter(log_dir=cfg.log_path)
-        TBoard.add_scalar('debug/param_number', param_num, 0)
-    else:
-        TBoard = None
-
     # keeping track of the best model 
     best_metric = 0
     # "early stopping" thing
@@ -91,10 +98,10 @@ def train_cap(cfg):
             break
 
         # train
-        training_loop(cfg, model, train_loader, criterion, optimizer, epoch, TBoard)
+        training_loop(cfg, model, train_loader, criterion, optimizer, epoch)
         # validation (next word)
         val_loss = validation_next_word_loop(
-            cfg, model, val_loader, greedy_decoder, criterion, epoch, TBoard, exp_name
+            cfg, model, val_loader, greedy_decoder, criterion, epoch
         )
         if scheduler is not None:
             scheduler.step(val_loss)
@@ -102,13 +109,11 @@ def train_cap(cfg):
         # validation (1-by-1 word)
         if epoch >= cfg.one_by_one_starts_at:
             val_metrics, duration = validation_1by1_loop(
-                cfg, model, val_loader, teacher_forced_decoder, epoch, TBoard
-            )
+                cfg, model, val_loader, teacher_forced_decoder, epoch)
             if cfg.to_log:
                 for metric, score in val_metrics.items():
-                    TBoard.add_scalar('val/metrics/' + metric, score * 100, epoch)
-                TBoard.add_scalar('val/duration_of_1by1', duration / 60, epoch)
-                TBoard.add_scalar('val/loss', val_loss, epoch)
+                    wandb.log({f'val/{metric}': score * 100})
+                
             # saving the model if it is better than the best so far
             if best_metric < val_metrics[cfg.key_metric]:
                 best_metric = val_metrics[cfg.key_metric]
@@ -132,5 +137,3 @@ def train_cap(cfg):
 
     print(f'{cfg.curr_time}')
     print(f'best {cfg.key_metric}: %2.4f at epoch {best_epoch}' % (best_metric * 100))
-    if cfg.to_log:
-        TBoard.close()

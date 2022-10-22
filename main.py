@@ -5,13 +5,12 @@ from utilities.config_constructor import Config
 from scripts.train_captioning_module import train_cap
 from scripts.eval_captioning_module import eval_cap
 
+
 def main(cfg):
-    if cfg.procedure == 'train_cap':
+    if 'train' in cfg.procedure:
         train_cap(cfg)
-    elif cfg.procedure == 'eval_cap':
+    if 'test' in cfg.procedure:
         eval_cap(cfg)
-    else:
-        raise NotImplementedError
 
 
 def get_parser():
@@ -25,12 +24,6 @@ def get_parser():
     parser.add_argument('--modality', type=str, default='audio_video',
                         choices=['audio', 'video', 'audio_video'],
                         help='modality to use. if audio_video both audio and video are used')
-    parser.add_argument('--video_feature_name', type=str, default='i3d')
-    parser.add_argument('--audio_feature_name', type=str, default='vggish')
-    parser.add_argument('--video_features_path', type=str, 
-                        default='./data/i3d_25fps_stack64step64_2stream_npy/')
-    parser.add_argument('--audio_features_path', type=str, 
-                        default='./data/vggish_npy/')
     parser.add_argument('--d_vid', type=int, default=1024, help='raw feature dimension')
     parser.add_argument('--d_aud', type=int, default=128, help='raw feature dimension')
     parser.add_argument('--word_emb_caps', default='glove.840B.300d', type=str, 
@@ -47,7 +40,7 @@ def get_parser():
 
     ## TRAINING
     parser.add_argument('--procedure', type=str, required=True, 
-                        choices=['train_cap', 'eval_cap', 'evaluate'])
+                        choices=['train', 'test', 'train_test'])
     parser.add_argument('--device_ids', type=int, nargs='+', default=[0], help='separated by a whitespace')
     parser.add_argument('--start_token', type=str, default='<s>', help='starting token')
     parser.add_argument('--end_token', type=str, default='</s>', help='ending token')

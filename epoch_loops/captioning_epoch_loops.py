@@ -7,7 +7,7 @@ from time import time
 from model.masking import mask
 from evaluation.evaluate import AVSD_eval
 from utilities.captioning_utils import HiddenPrints, get_lr
-
+import wandb
 
 def greedy_decoder(model, feature_stacks, max_len, start_idx, end_idx, pad_idx, modality):
     assert model.training is False, 'call model.eval first'
@@ -211,7 +211,7 @@ def batch_to_device(batch, device):
     return batch
 
 
-def training_loop(cfg, model, loader, criterion, optimizer, epoch, TBoard):
+def training_loop(cfg, model, loader, criterion, optimizer, epoch):
     model.train()
     train_total_loss = 0
     loader.dataset.update_iterator()
@@ -243,12 +243,11 @@ def training_loop(cfg, model, loader, criterion, optimizer, epoch, TBoard):
 
     train_total_loss_norm = train_total_loss / len(loader)
     
-    if TBoard is not None:
-        TBoard.add_scalar('debug/train_loss_epoch', train_total_loss_norm, epoch)
-        TBoard.add_scalar('debug/lr', get_lr(optimizer), epoch)
+    if cfg.to_log:
+        wandb.log({'train/loss': train_total_loss_norm})
             
 
-def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch, TBoard, exp_name):
+def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch):
     model.eval()
     val_total_loss = 0
     loader.dataset.update_iterator()
@@ -274,12 +273,12 @@ def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch, TBo
             val_total_loss += loss.item()
             
     val_total_loss_norm = val_total_loss / len(loader)
-    if TBoard is not None:
-        TBoard.add_scalar('debug/val_loss_epoch', val_total_loss_norm, epoch)
+    if cfg.to_log:
+        wandb.log({'val/loss': val_total_loss_norm})
 
     return val_total_loss_norm
 
-def validation_1by1_loop(cfg, model, loader, decoder, epoch, TBoard):
+def validation_1by1_loop(cfg, model, loader, decoder, epoch):
     start_timer = time()
     
     # init the dict with results and other technical info

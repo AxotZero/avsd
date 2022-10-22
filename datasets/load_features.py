@@ -50,64 +50,58 @@ def pad_segment(feature, max_feature_len, pad_idx):
     return feature
 
 
-def load_features_from_npy(feature_pkl, cfg, feature_names_list, video_id, start, end, duration,
+def load_features_from_npy(feature_pkl, cfg, video_id, start, end, duration,
                            pad_idx, get_full_feat=False):
-    supported_feature_names = {'i3d_features', 'vggish_features'}
-    assert isinstance(feature_names_list, list)
-    assert len(feature_names_list) > 0
-    assert set(feature_names_list).issubset(supported_feature_names)
 
     stacks = {}
     if get_full_feat:
         stacks['orig_feat_length'] = {}
 
-    if 'vggish_features' in feature_names_list:
-        try:
-            stack_vggish = feature_pkl[video_id]['audio']
-            stack_vggish = torch.from_numpy(stack_vggish).float()
+    # get audio feature
+    try:
+        stack_vggish = feature_pkl[video_id]['audio']
+        stack_vggish = torch.from_numpy(stack_vggish).float()
 
-            if get_full_feat:
-                stacks['orig_feat_length']['audio'] = stack_vggish.shape[0]
-                stack_vggish = pad_segment(stack_vggish, cfg.pad_feats_up_to['audio'], pad_idx)
-            else:
-                stack_vggish = crop_a_segment(stack_vggish, start, end, duration)
-        except FileNotFoundError:
-            stack_vggish = None
-        stacks['audio'] = stack_vggish
+        if get_full_feat:
+            stacks['orig_feat_length']['audio'] = stack_vggish.shape[0]
+            stack_vggish = pad_segment(stack_vggish, cfg.pad_feats_up_to['audio'], pad_idx)
+        else:
+            stack_vggish = crop_a_segment(stack_vggish, start, end, duration)
+    except FileNotFoundError:
+        stack_vggish = None
+    stacks['audio'] = stack_vggish
     # not elif
-    if 'i3d_features' in feature_names_list:
-        try:
-            stack_rgb = feature_pkl[video_id]['rgb']
-            stack_flow = feature_pkl[video_id]['flow']
-            a=np.shape(stack_flow)
-            b=np.shape(stack_rgb)
-            if a[0] !=b[0]:
-                z=np.zeros([int(abs(a[0]-b[0])),2048]).astype(np.float32)
-                if a[0] < b[0]:
-                    stack_flow = np.concatenate((stack_flow,z),axis=0)
-                else:
-                    stack_rgb = np.concatenate((stack_rgb,z),axis=0)
-            stack_rgb = torch.from_numpy(stack_rgb).float()
-            stack_flow = torch.from_numpy(stack_flow).float()
-            if get_full_feat:
-                stacks['orig_feat_length']['rgb'] = stack_rgb.shape[0]
-                stacks['orig_feat_length']['flow'] = stack_flow.shape[0]
-                stack_rgb = pad_segment(stack_rgb, cfg.pad_feats_up_to['video'], pad_idx)
-                stack_flow = pad_segment(stack_flow, cfg.pad_feats_up_to['video'], pad_idx=0)
+    # get video feature
+    try:
+        stack_rgb = feature_pkl[video_id]['rgb']
+        stack_flow = feature_pkl[video_id]['flow']
+        a=np.shape(stack_flow)
+        b=np.shape(stack_rgb)
+        if a[0] !=b[0]:
+            z=np.zeros([int(abs(a[0]-b[0])),2048]).astype(np.float32)
+            if a[0] < b[0]:
+                stack_flow = np.concatenate((stack_flow,z),axis=0)
             else:
-                stack_rgb = crop_a_segment(stack_rgb, start, end, duration)
-                stack_flow = crop_a_segment(stack_flow, start, end, duration)
-                nframes = min(stack_rgb.shape[0], stack_flow.shape[0])
-                stack_rgb = stack_rgb[:nframes]
-                stack_flow = stack_flow[:nframes]
-        except FileNotFoundError:
-            stack_rgb = None
-            stack_flow = None
-        assert stack_rgb.shape == stack_flow.shape
-        stacks['rgb'] = stack_rgb
-        stacks['flow'] = stack_flow
-    if 'i3d_features' not in feature_names_list and 'vggish_features' not in feature_names_list:
-        raise Exception(f'This methods is not implemented for {feature_names_list}')
+                stack_rgb = np.concatenate((stack_rgb,z),axis=0)
+        stack_rgb = torch.from_numpy(stack_rgb).float()
+        stack_flow = torch.from_numpy(stack_flow).float()
+        if get_full_feat:
+            stacks['orig_feat_length']['rgb'] = stack_rgb.shape[0]
+            stacks['orig_feat_length']['flow'] = stack_flow.shape[0]
+            stack_rgb = pad_segment(stack_rgb, cfg.pad_feats_up_to['video'], pad_idx)
+            stack_flow = pad_segment(stack_flow, cfg.pad_feats_up_to['video'], pad_idx=0)
+        else:
+            stack_rgb = crop_a_segment(stack_rgb, start, end, duration)
+            stack_flow = crop_a_segment(stack_flow, start, end, duration)
+            nframes = min(stack_rgb.shape[0], stack_flow.shape[0])
+            stack_rgb = stack_rgb[:nframes]
+            stack_flow = stack_flow[:nframes]
+    except FileNotFoundError:
+        stack_rgb = None
+        stack_flow = None
+    assert stack_rgb.shape == stack_flow.shape
+    stacks['rgb'] = stack_rgb
+    stacks['flow'] = stack_flow
 
     return stacks
 

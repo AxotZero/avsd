@@ -199,30 +199,19 @@ class VGGishFeaturesDataset(Dataset):
     
 class AudioVideoFeaturesDataset(Dataset):
     
-    def __init__(self, feature_pkl, video_features_path, video_feature_name, audio_features_path, 
-                 audio_feature_name, meta_path, device, pad_idx, get_full_feat, cfg):
+    def __init__(self, feature_pkl, meta_path, device, pad_idx, get_full_feat, cfg):
         self.feature_pkl = feature_pkl
         self.cfg = cfg
         self.num_workers = self.cfg.num_workers
-        self.video_features_path = video_features_path
-        self.video_feature_name = f'{video_feature_name}_features'
-        self.audio_features_path = audio_features_path
-        self.audio_feature_name = f'{audio_feature_name}_features'
-        self.feature_names_list = [self.video_feature_name, self.audio_feature_name]
         self.device = device
         self.dataset = pd.read_csv(meta_path, sep='\t')
         self.pad_idx = pad_idx
         self.get_full_feat = get_full_feat
         
-        if self.video_feature_name == 'i3d_features':
-            self.video_feature_size = 2048
-        else:
-            raise Exception(f'Inspect: "{self.video_feature_name}"')
-            
-        if self.audio_feature_name == 'vggish_features':
-            self.audio_feature_size = 128
-        else:
-            raise Exception(f'Inspect: "{self.audio_feature_name}"')
+        
+        self.video_feature_size = 2048
+        self.audio_feature_size = 128
+        
 
 
     def __getitem__(self, indices):
@@ -235,7 +224,7 @@ class AudioVideoFeaturesDataset(Dataset):
             video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
-                self.feature_pkl, self.cfg, self.feature_names_list,
+                self.feature_pkl, self.cfg, 
                 video_id, start, end, duration, self.pad_idx, self.get_full_feat
             )
             vid_stack_rgb, vid_stack_flow, aud_stack = stack['rgb'], stack['flow'], stack['audio']
@@ -316,8 +305,6 @@ class AVSD10Dataset(Dataset):
         self.phase = phase
         self.get_full_feat = get_full_feat
 
-        self.feature_names = f'{cfg.video_feature_name}_{cfg.audio_feature_name}'
-        
         if phase == 'train':
             self.meta_path = cfg.train_meta_path
             self.batch_size = cfg.train_batch_size
@@ -342,20 +329,18 @@ class AVSD10Dataset(Dataset):
 
         if cfg.modality == 'video':
             self.features_dataset = I3DFeaturesDataset(
-                cfg.video_features_path, cfg.video_feature_name, self.meta_path, 
-                torch.device(cfg.device), self.pad_idx, self.get_full_feat, cfg
+                self.meta_path, torch.device(cfg.device), 
+                self.pad_idx, self.get_full_feat, cfg
             )
         elif cfg.modality == 'audio':
             self.features_dataset = VGGishFeaturesDataset(
-                cfg.audio_features_path, cfg.audio_feature_name, self.meta_path, 
-                torch.device(cfg.device), self.pad_idx, self.get_full_feat, cfg
+                self.meta_path, torch.device(cfg.device), 
+                self.pad_idx, self.get_full_feat, cfg
             )
         elif cfg.modality == 'audio_video':
             self.features_dataset = AudioVideoFeaturesDataset(
-                feature_pkl,
-                cfg.video_features_path, cfg.video_feature_name, cfg.audio_features_path, 
-                cfg.audio_feature_name, self.meta_path, torch.device(cfg.device), self.pad_idx, 
-                self.get_full_feat, cfg
+                feature_pkl, self.meta_path, torch.device(cfg.device), 
+                self.pad_idx, self.get_full_feat, cfg
             )
         else:
             raise Exception(f'it is not implemented for modality: {cfg.modality}')

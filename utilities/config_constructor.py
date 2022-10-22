@@ -22,11 +22,7 @@ class Config(object):
         self.val_meta_path = args.val_meta_path
         self.test_meta_path = args.test_meta_path
         self.modality = args.modality
-        self.video_feature_name = args.video_feature_name
-        self.audio_feature_name = args.audio_feature_name
         self.feature_dir = args.feature_dir
-        self.video_features_path = args.video_features_path
-        self.audio_features_path = args.audio_features_path
         # make them d_video and d_audio
         self.d_vid = args.d_vid
         self.d_aud = args.d_aud
@@ -41,14 +37,11 @@ class Config(object):
         self.word_emb_caps = args.word_emb_caps
 
         # model
-        if args.procedure == 'train_cap':
+            
+        if 'train' in self.procedure:
             self.unfreeze_word_emb = args.unfreeze_word_emb
             self.model = args.model
             self.key_metric = args.key_metric
-        elif args.procedure == 'eval_cap':
-            pass
-        else:
-            raise NotImplementedError
 
         self.dout_p = args.dout_p
         self.N = args.N
@@ -107,12 +100,13 @@ class Config(object):
         self.last_only = args.last_only
         self.region_std_coeff = args.region_std_coeff
         # logging
+        # self.to_log = args.to_log if not args.debug else False
         self.to_log = args.to_log
         if args.to_log:
             self.log_dir = args.log_dir
             self.checkpoint_dir = args.log_dir  # the same yes
-            self.log_path = os.path.join(self.log_dir, args.exp_name, args.procedure)
-            self.model_checkpoint_path =os.path.join(self.checkpoint_dir, args.exp_name, args.procedure)
+            self.log_path = os.path.join(self.log_dir, args.exp_name, 'train')
+            self.model_checkpoint_path =os.path.join(self.checkpoint_dir, args.exp_name, 'train')
         else:
             self.log_dir = None
             self.log_path = None

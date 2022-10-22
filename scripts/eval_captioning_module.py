@@ -7,9 +7,13 @@ from epoch_loops.captioning_epoch_loops import (teacher_forced_decoder, validati
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
-
+import wandb
 
 def eval_cap(cfg):
+    cfg.last_only=True
+    cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/train/best_cap_model.pt'
+    cfg.reference_paths = './dstc10avsd_eval/data/test_set4DSTC10-AVSD_multiref+reason.json'
+
     # doing our best to make it replicable
     torch.manual_seed(0)
     np.random.seed(0)
@@ -36,9 +40,14 @@ def eval_cap(cfg):
 
     # evaluation (1-by-1 word)
     metrics, duration = validation_1by1_loop(
-        cfg, model, test_loader, teacher_forced_decoder, 0, None
+        cfg, model, test_loader, teacher_forced_decoder, 0
     )
     print ('-' * 25)
     for metric, score in metrics.items():
         print ('| %s: %2.4f' % (metric, 100 * score))
     print ('-' * 25)
+
+    if cfg.to_log:
+        for metric, score in metrics.items():
+            wandb.log({f'test/{metric}': score * 100})
+                
