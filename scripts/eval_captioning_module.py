@@ -11,8 +11,11 @@ import wandb
 
 def eval_cap(cfg):
     cfg.last_only=True
-    cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/train/best_cap_model.pt'
-    cfg.reference_paths = './dstc10avsd_eval/data/test_set4DSTC10-AVSD_multiref+reason.json'
+    cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
+    cfg.reference_paths = ['./dstc10avsd_eval/data/test_set4DSTC10-AVSD_multiref+reason.json']
+    cfg.unfreeze_word_emb = False
+    # cfg.inference_batch_size = cfg.train_batch_size // len(cfg.device_ids) * 2
+    # cfg.device_ids = [cfg.device_ids[-1]]
 
     # doing our best to make it replicable
     torch.manual_seed(0)

@@ -1,3 +1,4 @@
+from pdb import set_trace as bp
 import os
 import json
 from tqdm import tqdm
@@ -278,6 +279,7 @@ def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch):
 
     return val_total_loss_norm
 
+
 def validation_1by1_loop(cfg, model, loader, decoder, epoch):
     start_timer = time()
     
@@ -373,8 +375,8 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
     if cfg.log_path is None:
         return None
     else:
-        ## SAVING THE RESULTS IN A JSON FILE
-        if cfg.procedure == 'train_cap':
+        # SAVING THE RESULTS IN A JSON FILE
+        if cfg.procedure == 'train_test':
             save_filename = f'captioning_results_{phase}_e{epoch}.json'
         else:
             save_filename = f'captioning_results_{phase}.json'

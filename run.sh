@@ -4,15 +4,15 @@
 
 datapath=data/features
 
-exp_name=test_wandb0
+exp_name=test_wandb2
 procedure='train_test'
 # procedure='test'
-device_ids='3 4 5'
-num_layers=6
+device_ids='4 5'
+num_layers=2
 num_workers=4
-batch_size=4
+batch_size=12
 epoch_num=60
-one_by_one_starts_at=53
+one_by_one_starts_at=55
 # debug="--debug"
 # dont_log="--dont_log"
 dont_log=""
@@ -25,8 +25,8 @@ test_set=./dstc10avsd_eval/data/test_set4DSTC10-AVSD_multiref+reason.json
 log_dir=./log
 
 # check if the log directory exists
-if [ -d "${log_dir}/${exp_name}/train_cap" ]; then
-   echo \"${log_dir}/${exp_name}/train_cap\" already exists. Set a new exp_name different from \"${exp_name}\", or remove the directory
+if [ -d "${log_dir}/${exp_name}/" ]; then
+   echo \"${log_dir}/${exp_name}/\" already exists. Set a new exp_name different from \"${exp_name}\", or remove the directory
    return
 fi
 # convert data

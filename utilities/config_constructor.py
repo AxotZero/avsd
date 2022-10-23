@@ -105,8 +105,8 @@ class Config(object):
         if args.to_log:
             self.log_dir = args.log_dir
             self.checkpoint_dir = args.log_dir  # the same yes
-            self.log_path = os.path.join(self.log_dir, args.exp_name, 'train')
-            self.model_checkpoint_path =os.path.join(self.checkpoint_dir, args.exp_name, 'train')
+            self.log_path = os.path.join(self.log_dir, args.exp_name)
+            self.model_checkpoint_path =os.path.join(self.checkpoint_dir, args.exp_name)
         else:
             self.log_dir = None
             self.log_path = None
