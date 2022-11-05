@@ -60,21 +60,3 @@ python main.py \
  --num_workers $num_workers \
  $debug \
  $dont_log
-
-
-# echo Answer generation and evaluation for $test_set
-# python main.py \
-#  --train_meta_path ./data/dstc10_train.csv \
-#  --test_meta_path $test_csv \
-#  --reference_paths $test_set \
-#  --video_features_path ${datapath}/video_feats$featpath_suffix/ \
-#  --audio_features_path ${datapath}/vggish$featpath_suffix/ \
-#  --procedure eval_cap \
-#  --pretrained_cap_model_path ${log_dir}/${exp_name}/train_cap/best_cap_model.pt \
-#  --B 12 \
-#  --stopwords data/stopwords.txt \
-#  --exp_name $exp_name \
-#  --log_dir $log_dir \
-#  --device_ids $device_ids \
-#  --num_workers $num_workers \
-#  $last_only

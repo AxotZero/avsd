@@ -12,7 +12,7 @@ def attention(Q, K, V, mask, dropout=None, get_attw=False):
     # (B, H, S, S)
     QKt = Q.matmul(K.transpose(-1, -2))
     sm_input = QKt / np.sqrt(d_k)
-
+    
     if mask is not None:
         sm_input = sm_input.masked_fill(mask == 0, -float('inf'))
 

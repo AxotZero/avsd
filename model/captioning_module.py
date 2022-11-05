@@ -134,7 +134,8 @@ class BiModalTransformer(nn.Module):
         self.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
 
     def forward(self, src: dict, trg, masks: dict, return_attw=False):
-        V, A = src['rgb'] + src['flow'], src['audio']
+        V = src['rgb'] + src['flow']
+        A = src['audio']
         C = trg
 
         # (B, Sm, Dm) <- (B, Sm, Dm), m in [a, v]; 
