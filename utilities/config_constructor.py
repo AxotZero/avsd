@@ -37,14 +37,13 @@ class Config(object):
         self.word_emb_caps = args.word_emb_caps
 
         # model
-            
         if 'train' in self.procedure:
             self.unfreeze_word_emb = args.unfreeze_word_emb
             self.model = args.model
             self.key_metric = args.key_metric
 
         self.dout_p = args.dout_p
-        self.N = args.N
+        self.num_layer = args.num_layer
         self.use_linear_embedder = args.use_linear_embedder
         if args.use_linear_embedder:
             self.d_model_video = args.d_model_video
@@ -52,7 +51,7 @@ class Config(object):
         else:
             self.d_model_video = self.d_vid
             self.d_model_audio = self.d_aud
-        self.H = args.H
+        self.num_head = args.num_head
         self.d_model = args.d_model
         self.d_model_caps = args.d_model_caps
         if 'video' in self.modality:
@@ -63,7 +62,7 @@ class Config(object):
         # training
         self.device_ids = args.device_ids
         self.device = f'cuda:{self.device_ids[0]}'
-        self.train_batch_size = args.B * len(self.device_ids)
+        self.train_batch_size = args.batch_size * len(self.device_ids)
         self.inference_batch_size = args.inf_B_coeff * self.train_batch_size
         self.num_workers = args.num_workers
         self.epoch_num = args.epoch_num
@@ -99,6 +98,11 @@ class Config(object):
         self.stopwords = args.stopwords
         self.last_only = args.last_only
         self.region_std_coeff = args.region_std_coeff
+
+        self.num_seg = args.num_seg
+        self.num_cnn_layer = args.num_cnn_layer
+        self.cnn_kernel_size = args.cnn_kernel_size
+
         # logging
         # self.to_log = args.to_log if not args.debug else False
         self.to_log = args.to_log

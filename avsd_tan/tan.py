@@ -38,26 +38,28 @@ class Feat2D(nn.Module):
 
 
 class Convs(nn.Module):
-    def __init__(self, cfg, mask2d, kernel_size=9, num_stack_layers=4): 
+    def __init__(self, cfg, mask2d): 
         super().__init__()
-        k = kernel_size
+        k = cfg.cnn_kernel_size
+        num_cnn_layer = cfg.num_cnn_layer
         input_size = cfg.d_model
         hidden_size = cfg.d_model*2
 
         # Padding to ensure the dimension of the output map2d
-        mask_kernel = torch.ones(1,1,k,k).to(mask2d.device) 
-        first_padding = (k - 1) * num_stack_layers // 2
+        mask_kernel = torch.ones(1,1,k,k).to(mask2d.device)
+        first_padding = (k - 1) * num_cnn_layer // 2
 
         self.weights = [
             self.mask2weight(mask2d, mask_kernel, padding=first_padding) 
         ]
         self.convs = nn.ModuleList(
-            [nn.Conv2d(input_size, hidden_size, kernel_size, padding=first_padding)]
+            [nn.Conv2d(input_size, hidden_size, k, padding=first_padding)]
         )
  
-        for _ in range(num_stack_layers - 1):
+        for _ in range(num_cnn_layer - 1):
             self.weights.append(self.mask2weight(self.weights[-1] > 0, mask_kernel))
             self.convs.append(nn.Conv2d(hidden_size, hidden_size, k))
+        
         self.fc = nn.Linear(hidden_size, input_size)
         
     def mask2weight(self, mask2d, mask_kernel, padding=0):
@@ -65,11 +67,12 @@ class Convs(nn.Module):
         weight = torch.conv2d(mask2d[None,None,:,:].float(),
             mask_kernel, padding=padding)[0, 0]
         weight[weight > 0] = 1 / weight[weight > 0]
+        weight.requires_grad=False
         return weight
     
     def forward(self, x):
         for conv, weight in zip(self.convs, self.weights):
-            x = conv(x).relu() * weight
+            x = conv(x).relu() * weight.to(x.get_device())
         x = x.permute(0, 2, 3, 1) # bs*sent, d_model, N, N -> # bs*sent,N, N, d_model
         x = self.fc(x)
         return x
@@ -81,7 +84,7 @@ class TAN(nn.Module):
 
         self.valid_position = get_valid_position(cfg.num_seg)
         poolers_position, self.mask2d = get_2d_position(cfg.num_seg)
-        self.mask2d = self.mask2d.to('cpu')
+        self.mask2d = self.mask2d.to('cuda')
 
         self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
         self.feat2d = Feat2D(cfg, poolers_position)

@@ -61,7 +61,7 @@ def get_parser():
     parser.add_argument('--lr_patience', type=int, help='ReduceLROnPlateau arguments')
     parser.add_argument('--lr_reduce_factor', type=float,
                         help='ReduceLROnPlateau arguments, (use 0.2 for 1/5)')
-    parser.add_argument('--B', type=int, default=12, help='batch size per device')
+    parser.add_argument('--batch_size', type=int, default=12, help='batch size per device')
     parser.add_argument('--inf_B_coeff', type=int, default=2,
                         help='The batch size on inference will be inf_B_coeff times B arg')
     parser.add_argument('--epoch_num', type=int, default=60, help='number of epochs to train')
@@ -99,27 +99,27 @@ def get_parser():
     parser.add_argument('--model', type=str, default='av_transformer',
                         choices=['transformer', 'av_transformer'], help='caption model type')
     parser.add_argument('--dout_p', type=float, default=0.1, help='dropout probability: in [0, 1]')
-    parser.add_argument('--N', type=int, default=2, help='number of layers in a model')
+    parser.add_argument('--num_layer', type=int, default=2, help='number of layers in a model')
     parser.add_argument(
         '--d_model', type=int, default=1024,
         help='the internal space in the multi-headed attention (when input dims of Q, K, V differ)')
     parser.add_argument(
-        '--d_model_video', type=int,
+        '--d_model_video', type=int, default=128,
         help='If use_linear_embedder is true, this is going to be the d_model size for video model'
     )
     parser.add_argument(
-        '--d_model_audio', type=int,
+        '--d_model_audio', type=int, default=64,
         help='If use_linear_embedder is true, this is going to be the d_model size for audio model'
     )
     parser.add_argument(
-        '--d_model_caps', type=int, default=300,
+        '--d_model_caps', type=int, default=256,
         help='hidden size of the crossmodal decoder (caption tokens are mapped into this dim)'
     )
     parser.add_argument(
         '--use_linear_embedder', dest='use_linear_embedder', action='store_true', default=False,
         help='Whether to include a dense layer between the raw features and input to the model'
     )
-    parser.add_argument('--H', type=int, default=4, help='number of heads in multiheaded attention')
+    parser.add_argument('--num_head', type=int, default=4, help='number of heads in multiheaded attention')
     parser.add_argument(
         '--d_ff_video', type=int, help='size of the internal layer of PositionwiseFeedForward')
     parser.add_argument(
@@ -133,6 +133,9 @@ def get_parser():
     parser.add_argument('--dont_log', dest='to_log', action='store_false',
                         help='Prevent logging in the experiment.')
     parser.add_argument('--feature_dir', type=str, default='./data/features/')
+    parser.add_argument('--num_seg', type=int, default=64)
+    parser.add_argument('--cnn_kernel_size', type=int, default=9)
+    parser.add_argument('--num_cnn_layer', type=int, default=4)
 
     parser.set_defaults(to_log=True)
     return parser

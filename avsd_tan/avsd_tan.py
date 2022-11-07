@@ -16,12 +16,13 @@ from .decoder import Decoder
 from .rnn import GRU
 
 
-class MainModel(nn.Module):
+class AVSDTan(nn.Module):
     def __init__(self, cfg, train_dataset):
         super().__init__()
         self.d_model = cfg.d_model
         self.last_only = cfg.last_only
         # margin of sentence
+        self.pad_idx = train_dataset.pad_idx
         self.context_start_idx = train_dataset.context_start_idx
         self.context_end_idx = train_dataset.context_end_idx
 
@@ -46,7 +47,7 @@ class MainModel(nn.Module):
 
     def forward(self, feats, text, padding_mask=None, text_mask=None, last_only=False):
         if padding_mask is None:
-            padding_mask = text.new_ones(text.size())
+            padding_mask = (text != self.pad_idx).bool()
         if text_mask is None:
             bs, num_word = text.size()
             text_mask = text.new_ones((bs, num_word, num_word))

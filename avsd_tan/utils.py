@@ -6,11 +6,12 @@ import numpy as np
 
 
 def get_pooling_counts(N=64):
-    assert N in [64, 128]
-    if N == 64:
-        return [15, 8, 8]
-    elif N == 128:
-        return [15, 8, 8, 8]
+    assert N >= 16 and (N & (N-1) == 0)
+    pooling_counts = [15]
+    while N > 16:
+        N /= 2
+        pooling_counts.append(8)
+    return pooling_counts 
     
 
 @lru_cache(None)

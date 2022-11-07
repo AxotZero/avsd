@@ -1,3 +1,5 @@
+from pdb import set_trace as bp
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,6 +17,7 @@ class DecoderCrossAttention(nn.Module):
         self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
+        self.norm = nn.LayerNorm(cfg.d_model)
     
     def forward(self, text, av_feat, attn_sent_index):
         """
@@ -38,18 +41,20 @@ class DecoderCrossAttention(nn.Module):
         ## only attn to given attn_sent_index av_feat 
         # for k and v, get the corresponding feature map of each word for text
         batch_indices = [[i] for i in range(bs)]
-        k = k[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, d_model
+        k = k[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k
         v = v[[batch_indices, attn_sent_index]] 
 
         attn = (q*k).sum(-1, keepdim=True)
-        attn = attn / np.sqrt(d_k) # bs, num_word, num_valid, 1
-        attn = F.softmax(attn, dim=-3)
+        attn = attn / np.sqrt(d_k) # bs, num_word, num_valid, num_head, 1
+        attn = F.sigmoid(attn)
+        # attn = F.softmax(attn, dim=-3)
 
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
+        out = self.norm(out)
         
-        return out, attn.squeeze(-1) 
+        return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
 
 class DecoderLayer(nn.Module):
@@ -94,7 +99,7 @@ class DecoderLayer(nn.Module):
         # ff + res
         text = self.res2(text, self.ff)
 
-        return text, attn.mean(dim=-1)
+        return text, attn
 
 
 class Decoder(nn.Module):

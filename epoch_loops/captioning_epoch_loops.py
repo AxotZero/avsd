@@ -156,6 +156,16 @@ def make_masks(feature_stacks, captions, modality, pad_idx):
     return masks
 
 
+def make_text_masks(x, pad_idx):
+    padding_mask = (x != pad_idx)
+
+    num_word = x.size(-1)
+    mask = torch.ones(1, num_word, num_word)
+    mask = torch.tril(mask, 0).bool().to(x.get_device())
+    text_mask = padding_mask.unsqueeze(-2) & mask
+    return padding_mask, text_mask
+
+
 def get_context_positions(caption_idx, context_start_idx, context_end_idx):
     """ obtain context end positions based on context_start_idx and context_end_idx
     """
@@ -209,12 +219,15 @@ def batch_to_device(batch, device):
     batch['feature_stacks']['flow'] = batch['feature_stacks']['flow'].to(device)
     batch['feature_stacks']['audio'] = batch['feature_stacks']['audio'].to(device)
     batch['caption'] = batch['caption'].to(device)
+    batch['tan_label'] = batch['tan_label'].to(device)
     return batch
 
 
-def training_loop(cfg, model, loader, criterion, optimizer, epoch):
+def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, epoch):
     model.train()
-    train_total_loss = 0
+    total_loss = 0
+    total_gen_loss = 0
+    total_tan_loss = 0
     loader.dataset.update_iterator()
     progress_bar_name = f'{cfg.exp_name}: train {epoch} @ {cfg.device}'
 
@@ -229,28 +242,43 @@ def training_loop(cfg, model, loader, criterion, optimizer, epoch):
                                                 loader.dataset.context_end_idx,
                                                 loader.dataset.end_idx,
                                                 loader.dataset.pad_idx)
-        masks = make_masks(batch['feature_stacks'], caption_idx_x, cfg.modality, loader.dataset.pad_idx)
-        pred = model(batch['feature_stacks'], caption_idx_x, masks)
+        # masks = make_masks(batch['feature_stacks'], caption_idx_x, cfg.modality, loader.dataset.pad_idx)
+        pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
+        pred, attn = model(batch['feature_stacks'], caption_idx_x, padding_mask=pad_mask, text_mask=text_mask)
         n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
-        loss = criterion(pred, caption_idx_y) / n_tokens
+
+        gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
+        tan_loss = tan_criterion(attn, batch['tan_label'])
+
+        loss = gen_loss + tan_loss
         loss.backward()
 
         if cfg.grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
 
         optimizer.step()
+        # torch.cuda.empty_cache()
 
-        train_total_loss += loss.item()
+        total_loss += loss.item()
+        total_gen_loss += gen_loss.item()
+        total_tan_loss += tan_loss.item()
 
-    train_total_loss_norm = train_total_loss / len(loader)
+    total_loss /= len(loader)
+    total_gen_loss /= len(loader)
+    total_tan_loss /= len(loader)
     
     if cfg.to_log:
-        wandb.log({'train/loss': train_total_loss_norm})
+        wandb.log({'train/loss': total_loss})
+        wandb.log({'train/gen_loss': total_gen_loss})
+        wandb.log({'train/tan_loss': total_tan_loss})
             
 
-def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch):
+def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_criterion, epoch):
     model.eval()
-    val_total_loss = 0
+    total_loss = 0
+    total_gen_loss = 0
+    total_tan_loss = 0
+
     loader.dataset.update_iterator()
     phase = loader.dataset.phase
     progress_bar_name = f'{cfg.exp_name}: {phase:<5} {epoch} @ {cfg.device}'
@@ -265,19 +293,32 @@ def validation_next_word_loop(cfg, model, loader, decoder, criterion, epoch):
                                                 loader.dataset.context_end_idx,
                                                 loader.dataset.end_idx,
                                                 loader.dataset.pad_idx)
-        masks = make_masks(batch['feature_stacks'], caption_idx_x, cfg.modality, loader.dataset.pad_idx)
+
+        pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
 
         with torch.no_grad():
-            pred = model(batch['feature_stacks'], caption_idx_x, masks)
+            pred, attn = model(batch['feature_stacks'], caption_idx_x, padding_mask=pad_mask, text_mask=text_mask)
             n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
-            loss = criterion(pred, caption_idx_y) / n_tokens
-            val_total_loss += loss.item()
-            
-    val_total_loss_norm = val_total_loss / len(loader)
-    if cfg.to_log:
-        wandb.log({'val/loss': val_total_loss_norm})
 
-    return val_total_loss_norm
+            gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
+            tan_loss = tan_criterion(attn, batch['tan_label'])
+
+            loss = gen_loss + tan_loss
+
+            total_loss += loss.item()
+            total_gen_loss += gen_loss.item()
+            total_tan_loss += tan_loss.item()
+            
+    total_loss /= len(loader)
+    total_gen_loss /= len(loader)
+    total_tan_loss /= len(loader)
+    
+    if cfg.to_log:
+        wandb.log({'valid/loss': total_loss})
+        wandb.log({'valid/gen_loss': total_gen_loss})
+        wandb.log({'valid/tan_loss': total_tan_loss})
+
+    return total_loss
 
 
 def validation_1by1_loop(cfg, model, loader, decoder, epoch):

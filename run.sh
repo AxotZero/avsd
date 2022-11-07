@@ -4,20 +4,32 @@
 
 datapath=data/features
 
-exp_name=test_wandb2
-procedure='train_test'
+exp_name=test_tan2
+
+## procedure
+# procedure='train_test'
+procedure='train'
 # procedure='test'
-device_ids='4 5'
+
+## model config
+num_seg=32
+cnn_kernel_size=5
+num_cnn_layer=4
 num_layers=2
+d_model=128
+
+## training 
+device_ids='4 5'
+batch_size=2 # per device
 num_workers=4
-batch_size=12
 epoch_num=60
 one_by_one_starts_at=55
-# debug="--debug"
+
+## log and debug
+debug="--debug"
 # dont_log="--dont_log"
 dont_log=""
-debug=""
-
+# debug=""
 
 train_set=./data/train_set4DSTC8-AVSD+reason.json
 val_set=./data/valid_set4DSTC10-AVSD+reason.json
@@ -43,13 +55,14 @@ python main.py \
  --test_meta_path ./data/dstc10_test.csv \
  --reference_paths $val_set \
  --procedure $procedure \
- --B $batch_size \
- --N $num_layers \
+ --batch_size $batch_size \
+ --num_layer $num_layers \
  --unfreeze_word_emb \
  --d_vid 2048 --d_aud 128 \
- --d_model_video 128 \
- --d_model_audio 64 \
- --d_model_caps 256 \
+ --d_model $d_model \
+ --num_seg $num_seg \
+ --cnn_kernel_size $cnn_kernel_size \
+ --num_cnn_layer $num_cnn_layer \
  --use_linear_embedder \
  --device_ids $device_ids \
  --epoch_num $epoch_num \
@@ -58,5 +71,6 @@ python main.py \
  --exp_name $exp_name \
  --log_dir $log_dir \
  --num_workers $num_workers \
+ --num_seg $num_seg \
  $debug \
  $dont_log

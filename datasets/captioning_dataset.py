@@ -1,4 +1,4 @@
-from multiprocessing import Pool
+import ast
 
 import pandas as pd
 import torch
@@ -7,7 +7,7 @@ from torch.utils.data.dataset import Dataset
 from torchtext import data
 
 from datasets.load_features import fill_missing_features, load_features_from_npy
-
+from avsd_tan.utils import get_valid_position
 
 def caption_iterator(cfg, batch_size, phase):
     print(f'Contructing caption_iterator for "{phase}" phase')
@@ -208,15 +208,62 @@ class AudioVideoFeaturesDataset(Dataset):
         self.pad_idx = pad_idx
         self.get_full_feat = get_full_feat
         
-        
         self.video_feature_size = 2048
         self.audio_feature_size = 128
-        
 
+        # self.tan = cfg.tan
+        # if self.tan:
+        self.num_seg = cfg.num_seg
+
+    def get_seg_feats(self, feat, num_seg=64, method='mean'):
+        """
+        feat: torch.tensor, it can be audio/visual
+        method: 'mean', 'max'
+        """
+        
+        if method == 'mean':
+            func = torch.mean
+        elif method == 'max':
+            func = torch.max
+        else:
+            raise Exception('method should be one of ["mean", "max"]')
+        
+        seq_len, hidden_size = feat.shape
+        if seq_len == num_seg:
+            return feat
+        
+        ret = torch.zeros((num_seg, hidden_size))
+        if seq_len < num_seg:
+            ret_idx = 0
+            ret_float_idx = 0
+            ret_step = num_seg / seq_len
+            for seq_idx in range(seq_len):
+                ret[ret_idx] = feat[seq_idx]
+                ret_float_idx += ret_step
+                ret_idx = round(ret_float_idx)
+        else:
+            seq_idx = 0
+            seq_float_idx = 0
+            seq_step = seq_len / num_seg
+            for ret_idx in range(num_seg):
+                seq_float_idx += seq_step
+                f = feat[seq_idx: round(seq_float_idx)]
+                ret[ret_idx] = func(f, dim=0)
+                seq_idx = round(seq_float_idx)
+        return ret
+
+    def iou(self, interval_1, interval_2):
+        start_i, end_i = interval_1[0], interval_1[1]
+        start, end = interval_2[0], interval_2[1]
+        intersection = max(0, min(end, end_i) - max(start, start_i))
+        union = min(max(end, end_i) - min(start, start_i), end-start + end_i-start_i)
+        iou = float(intersection) / (union + 1e-8)
+        return iou
 
     def __getitem__(self, indices):
         video_ids, captions, starts, ends = [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
+        sents_iou_target_stacks = []
         
         # [3]
         for idx in indices:
@@ -244,6 +291,25 @@ class AudioVideoFeaturesDataset(Dataset):
             if aud_stack is None:
                 # print(f'Audio is None. Zero (1, D) @: {video_id}')
                 aud_stack = fill_missing_features('zero', self.audio_feature_size)
+            
+            # if self.tan:
+                # build clip features
+            vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg)
+            vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg)
+            aud_stack = self.get_seg_feats(aud_stack, self.num_seg)
+
+            valid_position = get_valid_position(self.num_seg)
+            seq_start = ast.literal_eval(seq_start)
+            seq_end = ast.literal_eval(seq_end)
+            sents_iou_target = []
+            for s, e in zip(seq_start, seq_end):
+                s_frame = round(s / duration * self.num_seg)
+                e_frame = round(e / duration * self.num_seg)
+                iou_target = []
+                for va in valid_position:
+                    iou_target.append(self.iou((s_frame, e_frame), va))
+                sents_iou_target.append(iou_target)
+                
 
             # append info for this index to the lists
             video_ids.append(video_id)
@@ -253,27 +319,22 @@ class AudioVideoFeaturesDataset(Dataset):
             vid_stacks_rgb.append(vid_stack_rgb)
             vid_stacks_flow.append(vid_stack_flow)
             aud_stacks.append(aud_stack)
+
+            # if self.tan:
+            sents_iou_target_stacks.append(sents_iou_target)
             
         # [4] see ActivityNetCaptionsDataset.__getitem__ documentation
         # rgb is padded with pad_idx; flow is padded with 0s: expected to be summed later
-        vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
-        vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
-        aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
+        # if not self.tan:
+        # vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
+        # vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
+        # aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
+        vid_stacks_rgb = torch.stack(vid_stacks_rgb, dim=0)
+        vid_stacks_flow = torch.stack(vid_stacks_flow, dim=0)
+        aud_stacks = torch.stack(aud_stacks, dim=0)
 
         starts = torch.tensor(starts).unsqueeze(1)
         ends = torch.tensor(ends).unsqueeze(1)
-                
-        # batch_dict = {
-        #     'video_ids': video_ids,
-        #     'captions': captions,
-        #     'starts': starts.to(self.device),
-        #     'ends': ends.to(self.device),
-        #     'feature_stacks': {
-        #         'rgb': vid_stacks_rgb.to(self.device),
-        #         'flow': vid_stacks_flow.to(self.device),
-        #         'audio': aud_stacks.to(self.device),
-        #     }
-        # }
 
         batch_dict = {
             'video_ids': video_ids,
@@ -284,7 +345,8 @@ class AudioVideoFeaturesDataset(Dataset):
                 'rgb': vid_stacks_rgb,
                 'flow': vid_stacks_flow,
                 'audio': aud_stacks,
-            }
+            },
+            'tan_label': torch.tensor(sents_iou_target_stacks) # bs, num_sent, num_valid
         }
 
         return batch_dict
@@ -366,7 +428,6 @@ class AVSD10Dataset(Dataset):
     
     def update_iterator(self):
         '''This should be called after every epoch'''
-        # self.caption_loader_iter = iter(self.caption_loader)
         self.caption_datas = list(iter(self.caption_loader))
 
         

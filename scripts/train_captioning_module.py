@@ -6,9 +6,11 @@ from torch.utils.data import DataLoader
 from datasets.captioning_dataset import AVSD10Dataset
 from epoch_loops.captioning_epoch_loops import (greedy_decoder, teacher_forced_decoder, save_model, training_loop, validation_1by1_loop, validation_next_word_loop)
 from loss.label_smoothing import LabelSmoothing
+from loss.iou_loss import TanLoss
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
+from avsd_tan.avsd_tan import AVSDTan
 
 import wandb
 
@@ -21,11 +23,10 @@ def train_cap(cfg):
                 'epoch': cfg.epoch_num,
                 'lr': cfg.lr,
                 'bs': cfg.train_batch_size,
-                'd_model_video': cfg.d_model_video,
-                'd_model_audio': cfg.d_model_audio,
-                'd_model_caps': cfg.d_model_caps,
-                'num_layer': cfg.N,
-                'num_head': cfg.H,
+                'd_model': cfg.d_model,
+                'num_layer': cfg.num_layer,
+                'num_head': cfg.num_head,
+                'num_seg': cfg.num_seg,
                 'optimizer': cfg.optimizer,
             }
         )
@@ -53,12 +54,15 @@ def train_cap(cfg):
         cap_model_cpt = None
         model_cfg = cfg
 
-    if cfg.modality == 'audio_video':
-        model = BiModalTransformer(model_cfg, train_dataset)
-    elif cfg.modality in ['video', 'audio']:
-        model = Transformer(model_cfg, train_dataset)
+    # if cfg.modality == 'audio_video':
+    #     model = BiModalTransformer(model_cfg, train_dataset)
+    # elif cfg.modality in ['video', 'audio']:
+    #     model = Transformer(model_cfg, train_dataset)
 
-    criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
+    model = AVSDTan(cfg, train_dataset)
+
+    gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
+    tan_criterion = TanLoss()
     
     if cfg.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
@@ -98,10 +102,10 @@ def train_cap(cfg):
             break
 
         # train
-        training_loop(cfg, model, train_loader, criterion, optimizer, epoch)
+        training_loop(cfg, model, train_loader, gen_criterion, tan_criterion, optimizer, epoch)
         # validation (next word)
         val_loss = validation_next_word_loop(
-            cfg, model, val_loader, greedy_decoder, criterion, epoch
+            cfg, model, val_loader, greedy_decoder, gen_criterion, tan_criterion, epoch
         )
         if scheduler is not None:
             scheduler.step(val_loss)

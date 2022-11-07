@@ -17,6 +17,8 @@ class GRU(nn.Module):
         self.ff = nn.Linear(cfg.d_model*4, cfg.d_model)
     
     def forward(self, x):
+        self.gru.flatten_parameters()
+        
         out, _ = self.gru(x)
         return self.ff(self.dropout(out))
 
