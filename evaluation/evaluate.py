@@ -58,7 +58,7 @@ class AVSD_eval(object):
         for d in submission['dialogs']:
             vid = d['image_id']
             if last_only:
-                t, turn = len(d['dialog']), d['dialog'][-1]
+                t, turn = -1, d['dialog'][-1]
                 answer = turn['answer'] if type(turn['answer'])==list else [turn['answer']]
                 results['%s_res%03d' % (vid, t)].extend([self.filter(a) for a in answer])
                 if 'reason' in turn:
@@ -81,7 +81,7 @@ class AVSD_eval(object):
             for d in gt['dialogs']:
                 vid = d['image_id']
                 if last_only:
-                    t, turn = len(d['dialog']), d['dialog'][-1]
+                    t, turn = -1, d['dialog'][-1]
                     answer = turn['answer'] if type(turn['answer'])==list else [turn['answer']]
                     gts['%s_res%03d' % (vid, t)].extend([self.filter(a) for a in answer])
                     if 'reason' in turn:

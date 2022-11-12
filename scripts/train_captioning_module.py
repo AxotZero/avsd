@@ -15,7 +15,7 @@ from avsd_tan.avsd_tan import AVSDTan
 import wandb
 
 def train_cap(cfg):
-    if cfg.to_log:
+    if cfg.wandb:
         wandb.init(
             project='avsd', 
             name=cfg.exp_name,
@@ -27,6 +27,8 @@ def train_cap(cfg):
                 'num_layer': cfg.num_layer,
                 'num_head': cfg.num_head,
                 'num_seg': cfg.num_seg,
+                'num_cnn_layer': cfg.num_cnn_layer,
+                'weight_decay': cfg.weight_decay,
                 'optimizer': cfg.optimizer,
             }
         )
@@ -87,10 +89,10 @@ def train_cap(cfg):
         model.load_state_dict(cap_model_cpt['model_state_dict'])
 
     # keeping track of the best model 
-    best_metric = 0
+    best_metric = -1
     # "early stopping" thing
     num_epoch_best_metric_unchanged = 0
-    best_epoch = 0
+    best_epoch = -1
 
     for epoch in range(cfg.epoch_num):
         print(f'The best metric was unchanged for {num_epoch_best_metric_unchanged} epochs.')
@@ -114,9 +116,14 @@ def train_cap(cfg):
         if epoch >= cfg.one_by_one_starts_at:
             val_metrics, duration = validation_1by1_loop(
                 cfg, model, val_loader, teacher_forced_decoder, epoch)
-            if cfg.to_log:
-                for metric, score in val_metrics.items():
-                    wandb.log({f'val/{metric}': score * 100})
+            if cfg.wandb:
+                wandb.log(
+                    {
+                        f'val_metric/{metric}': score * 100 
+                        for metric, score in val_metrics.items()
+                    },
+                    step=epoch
+                )
                 
             # saving the model if it is better than the best so far
             if best_metric < val_metrics[cfg.key_metric]:

@@ -7,6 +7,8 @@ from epoch_loops.captioning_epoch_loops import (teacher_forced_decoder, validati
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
+from avsd_tan.avsd_tan import AVSDTan
+
 import wandb
 
 def eval_cap(cfg):
@@ -34,10 +36,11 @@ def eval_cap(cfg):
 
     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
     model_cfg = cap_model_cpt['config']
-    if cfg.modality == 'audio_video':
-        model = BiModalTransformer(model_cfg, test_dataset)
-    elif cfg.modality in ['video', 'audio']:
-        model = Transformer(model_cfg, test_dataset)
+    # if cfg.modality == 'audio_video':
+    #     model = BiModalTransformer(model_cfg, test_dataset)
+    # elif cfg.modality in ['video', 'audio']:
+    #     model = Transformer(model_cfg, test_dataset)
+    model = AVSDTan(cfg, test_dataset)
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)
@@ -54,7 +57,7 @@ def eval_cap(cfg):
         print ('| %s: %2.4f' % (metric, 100 * score))
     print ('-' * 25)
 
-    if cfg.to_log:
+    if cfg.wandb:
         for metric, score in metrics.items():
             wandb.log({f'test/{metric}': score * 100})
                 

@@ -4,6 +4,7 @@ import json
 from tqdm import tqdm
 import torch
 from time import time
+from avsd_tan.utils import get_valid_position
 
 from model.masking import mask
 from evaluation.evaluate import AVSD_eval
@@ -58,8 +59,10 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
             device = feature_stacks['rgb'].device
         else:
             raise Exception(f'Unknown modality: {modality}')
-
-        for t in range(start_pos.size(1)):
+        
+        # for each QA turn, only last if last_only
+        s = 0 if not last_only else start_pos.size(-1)-1
+        for t in range(s, start_pos.size(1)):
             # store source information
             max_src_context_len = int(torch.max(end_pos[:, t] - start_pos[:, t]))
             src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
@@ -84,9 +87,12 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
             end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
             attw = None
             batch_indices = torch.arange(B, dtype=torch.long, device=device)
+
+            map2d = None
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
-                masks = make_masks(feature_stacks, trg, modality, pad_idx)
-                preds, aw = model(feature_stacks, trg, masks, return_attw=True)
+                # masks = make_masks(feature_stacks, trg, modality, pad_idx)
+                pad_mask, text_mask = make_text_masks(trg, pad_idx)
+                preds, attn, map2d = model(feature_stacks, trg, pad_mask, text_mask, map2d, ret_map2d=True)
                 preds[:, :, 0] = float('-inf')  # suppress UNK
                 next_word = torch.where(completeness_mask==0,
                                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
@@ -94,13 +100,14 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
                 out = torch.cat([out, next_word], dim=-1)
                 trg = torch.cat([trg, pad_idx_], dim=-1)
                 # aw = model.module.enc_attw()[batch_indices, current_position].unsqueeze(1)
-                aw = aw[batch_indices, current_position].unsqueeze(1)
-                attw = torch.cat([attw, aw], dim=1) if attw is not None else aw
+                # aw = aw[batch_indices, current_position].unsqueeze(1)
+                # # concat all the words' attention weights
+                # attw = torch.cat([attw, aw], dim=1) if attw is not None else aw
                 current_position += 1
                 trg[batch_indices, current_position] = next_word[:, 0]
                 completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
             targets.append(out)
-            attweights.append(attw)
+            attweights.append(attn[:, -1])
     return sources, targets, attweights
 
 
@@ -267,10 +274,15 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
     total_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
     
-    if cfg.to_log:
-        wandb.log({'train/loss': total_loss})
-        wandb.log({'train/gen_loss': total_gen_loss})
-        wandb.log({'train/tan_loss': total_tan_loss})
+    if cfg.wandb:
+        wandb.log(
+            {
+                'train/loss': total_loss,
+                'train/gen_loss': total_gen_loss,
+                'train/tan_loss': total_tan_loss
+            },
+            step=epoch
+        )
             
 
 def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_criterion, epoch):
@@ -313,10 +325,15 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
     total_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
     
-    if cfg.to_log:
-        wandb.log({'valid/loss': total_loss})
-        wandb.log({'valid/gen_loss': total_gen_loss})
-        wandb.log({'valid/tan_loss': total_tan_loss})
+    if cfg.wandb:
+        wandb.log(
+            {
+                'valid/loss': total_loss,
+                'valid/gen_loss': total_gen_loss,
+                'valid/tan_loss': total_tan_loss
+            },
+            step=epoch
+        )
 
     return total_loss
 
@@ -347,9 +364,10 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
 
         batch = batch_to_device(batch, torch.device(cfg.device))
 
+
         ints_stack_list = decoder(
             model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
-            context_start_idx=context_start_idx, context_end_idx=context_end_idx
+            context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
         )
         input_lengths = torch.sum(mask(batch['feature_stacks']['rgb'][:, :, 0], None, pad_idx), dim=-1).cpu().view(-1)
         list_of_lists_with_filtered_sentences = [[] for _ in range(len(ints_stack_list[0][0]))]
@@ -389,18 +407,30 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
                 # find regions for reasoning with attention weights over visual feature frames
                 # TODO: detection of multiple regions and audio features should be considered
                 ilen = input_lengths[b]
-                attw_mean = torch.mean(attw[:len(strings2)], dim=0)[:ilen]
-                frame_indices = torch.arange(ilen, dtype=torch.float) / ilen  # relative frame positions
-                frame_mean = float((frame_indices * attw_mean).sum())  # expected value of attended frame
-                frame_std = float(((frame_indices - frame_mean) ** 2 * attw_mean).sum().sqrt())
-                start_time = max(0.0, (frame_mean - cfg.region_std_coeff * frame_std))
-                end_time = min(1.0, (frame_mean + cfg.region_std_coeff * frame_std))
+                s, e = get_valid_position(cfg.num_seg)[int(torch.argmax(attw))]
+                start_time = s / cfg.num_seg
+                end_time = e / cfg.num_seg
+                # attw_mean = torch.mean(attw[:len(strings2)], dim=0)[:ilen]
+                # frame_indices = torch.arange(ilen, dtype=torch.float) / ilen  # relative frame positions
+                # frame_mean = float((frame_indices * attw_mean).sum())  # expected value of attended frame
+                # frame_std = float(((frame_indices - frame_mean) ** 2 * attw_mean).sum().sqrt())
+                # start_time = max(0.0, (frame_mean - cfg.region_std_coeff * frame_std))
+                # end_time = min(1.0, (frame_mean + cfg.region_std_coeff * frame_std))
                 list_of_lists_with_filtered_sentences[b].append((sentence1, sentence2, (start_time, end_time)))
 
         ### ADDING RESULTS TO THE DICT WITH RESULTS
         for video_id, start, end, sents in zip(batch['video_ids'], batch['starts'], batch['ends'],
                                                list_of_lists_with_filtered_sentences):
+            # bp()
             segment = []
+            if cfg.last_only:
+                for i in range(len(batch['starts'])-1):
+                    segment.append({
+                        'question': '',
+                        'answer': '',
+                        'reason': [{'timestamp': [-1, -1], 'sentence': ''}]
+                    })
+
             for sent in sents:
                 start_time, end_time = sent[2]
                 dur = end.item() - start.item()

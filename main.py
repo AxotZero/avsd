@@ -136,6 +136,7 @@ def get_parser():
     parser.add_argument('--num_seg', type=int, default=64)
     parser.add_argument('--cnn_kernel_size', type=int, default=9)
     parser.add_argument('--num_cnn_layer', type=int, default=4)
+    parser.add_argument('--wandb', action='store_true')
 
     parser.set_defaults(to_log=True)
     return parser

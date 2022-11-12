@@ -297,10 +297,15 @@ class AudioVideoFeaturesDataset(Dataset):
             vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg)
             vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg)
             aud_stack = self.get_seg_feats(aud_stack, self.num_seg)
-
             valid_position = get_valid_position(self.num_seg)
-            seq_start = ast.literal_eval(seq_start)
-            seq_end = ast.literal_eval(seq_end)
+
+            if type(seq_start) == str and  seq_start.startswith('['):
+                seq_start = ast.literal_eval(seq_start)
+                seq_end = ast.literal_eval(seq_end)
+            else:
+                seq_start = [0]
+                seq_end = [0]
+
             sents_iou_target = []
             for s, e in zip(seq_start, seq_end):
                 s_frame = round(s / duration * self.num_seg)

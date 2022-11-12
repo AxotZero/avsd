@@ -4,11 +4,11 @@
 
 datapath=data/features
 
-exp_name=test_tan2
+exp_name=bs4_d256_w1e-6
 
 ## procedure
-# procedure='train_test'
-procedure='train'
+procedure='train_test'
+# procedure='train'
 # procedure='test'
 
 ## model config
@@ -16,20 +16,26 @@ num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=4
 num_layers=2
-d_model=128
+d_model=256
+weight_decay=0.000001
 
 ## training 
-device_ids='4 5'
+device_ids='0 1'
 batch_size=2 # per device
-num_workers=4
+num_workers=2
 epoch_num=60
-one_by_one_starts_at=55
+one_by_one_starts_at=50
 
 ## log and debug
-debug="--debug"
+# debug="--debug"
+debug=""
 # dont_log="--dont_log"
 dont_log=""
 # debug=""
+# last_only="--last_only"
+last_only=""
+wandb="--wandb"
+# wandb=""
 
 train_set=./data/train_set4DSTC8-AVSD+reason.json
 val_set=./data/valid_set4DSTC10-AVSD+reason.json
@@ -72,5 +78,8 @@ python main.py \
  --log_dir $log_dir \
  --num_workers $num_workers \
  --num_seg $num_seg \
+ --weight_decay $weight_decay \
  $debug \
- $dont_log
+ $dont_log \
+ $last_only \
+ $wandb \

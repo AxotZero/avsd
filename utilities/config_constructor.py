@@ -114,3 +114,5 @@ class Config(object):
         else:
             self.log_dir = None
             self.log_path = None
+        
+        self.wandb = args.wandb
