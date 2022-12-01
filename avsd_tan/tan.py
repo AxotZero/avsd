@@ -81,14 +81,17 @@ class Convs(nn.Module):
 class TAN(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-
+        self.no_sen_fusion = cfg.no_sen_fusion
         self.valid_position = get_valid_position(cfg.num_seg)
         poolers_position, self.mask2d = get_2d_position(cfg.num_seg)
         self.mask2d = self.mask2d.to('cuda')
 
-        self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
+        
         self.feat2d = Feat2D(cfg, poolers_position)
-        self.convs = Convs(cfg, self.mask2d)
+        
+        if not self.no_sen_fusion:
+            self.convs = Convs(cfg, self.mask2d)
+            self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
         
     def forward(self, AV, S):
         """
@@ -107,15 +110,18 @@ class TAN(nn.Module):
         # build map2d
         AV = AV.transpose(-1, -2) # for cnn and pooling
         map2d = self.feat2d(AV) # bs*num_sent, d_model, num_seg, num_seg, 
-        S = self.encode_S(S)
-        
-        # Fuse sentence and feature by Hamard Product
-        map2d = map2d * S[:, :, None, None]
-        map2d = F.normalize(map2d)
-        
-        # conv
-        map2d = self.convs(map2d) # bs*sent, N, N, d_model
-        
+
+        if self.no_sen_fusion:
+            map2d = map2d.permute(0, 2, 3, 1)
+        else:
+            S = self.encode_S(S)
+            # Fuse sentence and feature by Hamard Product
+            map2d = map2d * S[:, :, None, None]
+            map2d = F.normalize(map2d)
+            
+            # convs
+            map2d = self.convs(map2d) # bs*sent, N, N, d_model
+            
         # get num_sent back
         map2d = map2d.view(bs, num_sent, num_seg, num_seg, d_model)
         

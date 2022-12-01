@@ -28,6 +28,7 @@ def train_cap(cfg):
                 'num_head': cfg.num_head,
                 'num_seg': cfg.num_seg,
                 'num_cnn_layer': cfg.num_cnn_layer,
+                'dout_p': cfg.dout_p, 
                 'weight_decay': cfg.weight_decay,
                 'optimizer': cfg.optimizer,
             }
@@ -46,7 +47,7 @@ def train_cap(cfg):
     train_pkl = load_pickle(f'{cfg.feature_dir}/train{"_debug" if cfg.debug else ""}.pkl')
     train_dataset = AVSD10Dataset(cfg, 'train', train_pkl, get_full_feat=False)
     val_dataset = AVSD10Dataset(cfg, 'val', train_pkl, get_full_feat=False)
-    train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate, pin_memory=True)
+    train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate)
     val_loader = DataLoader(val_dataset, num_workers=cfg.num_workers, collate_fn=val_dataset.dont_collate)
 
     if cfg.pretrained_cap_model_path is not None:
@@ -89,19 +90,19 @@ def train_cap(cfg):
         model.load_state_dict(cap_model_cpt['model_state_dict'])
 
     # keeping track of the best model 
-    best_metric = -1
+    best_metric = float('inf')
     # "early stopping" thing
     num_epoch_best_metric_unchanged = 0
     best_epoch = -1
 
     for epoch in range(cfg.epoch_num):
-        print(f'The best metric was unchanged for {num_epoch_best_metric_unchanged} epochs.')
+        print(f'The best metric was  for {num_epoch_best_metric_unchanged} epochs.')
         print(f'Expected early stop @ {epoch+cfg.early_stop_after-num_epoch_best_metric_unchanged}')
         print(f'Started @ {cfg.curr_time}; Current timer: {timer(cfg.curr_time)}')
         
         # stop training if metric hasn't been changed for cfg.early_stop_after epochs
-        if num_epoch_best_metric_unchanged == cfg.early_stop_after:
-            break
+        # if num_epoch_best_metric_unchanged == cfg.early_stop_after:
+        #     break
 
         # train
         training_loop(cfg, model, train_loader, gen_criterion, tan_criterion, optimizer, epoch)
@@ -112,8 +113,23 @@ def train_cap(cfg):
         if scheduler is not None:
             scheduler.step(val_loss)
 
+
+        # save_model
+        if val_loss < best_metric:
+            best_metric = val_loss
+            save_model(cfg, epoch, model, optimizer, val_loss,
+                        None, train_dataset.trg_voc_size)
+            # reset the early stopping criterion
+            num_epoch_best_metric_unchanged = 0
+            best_epoch = epoch
+        else:
+            num_epoch_best_metric_unchanged += 1
+        print(f'Validation scores at epoch {epoch}',
+                f'(best val_loss: %2.4f)' % (best_metric * 100)
+                if epoch==best_epoch else '')
+
         # validation (1-by-1 word)
-        if epoch >= cfg.one_by_one_starts_at:
+        if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
             val_metrics, duration = validation_1by1_loop(
                 cfg, model, val_loader, teacher_forced_decoder, epoch)
             if cfg.wandb:
@@ -126,19 +142,16 @@ def train_cap(cfg):
                 )
                 
             # saving the model if it is better than the best so far
-            if best_metric < val_metrics[cfg.key_metric]:
-                best_metric = val_metrics[cfg.key_metric]
-                save_model(cfg, epoch, model, optimizer, val_loss,
-                               val_metrics, train_dataset.trg_voc_size)
-                # reset the early stopping criterion
-                num_epoch_best_metric_unchanged = 0
-                best_epoch = epoch
-            else:
-                num_epoch_best_metric_unchanged += 1
+            # if best_metric < val_metrics[cfg.key_metric]:
+            #     best_metric = val_metrics[cfg.key_metric]
+            #     save_model(cfg, epoch, model, optimizer, val_loss,
+            #                    val_metrics, train_dataset.trg_voc_size)
+            #     # reset the early stopping criterion
+            #     num_epoch_best_metric_unchanged = 0
+            #     best_epoch = epoch
+            # else:
+            #     num_epoch_best_metric_unchanged += 1
             # Output the results
-            print(f'Validation scores at epoch {epoch}',
-                  f'(best {cfg.key_metric}: %2.4f)' % (best_metric * 100)
-                  if epoch==best_epoch else '')
             print('-' * 25)
             for metric, score in val_metrics.items():
                 print('| %s: %2.4f' % (metric, 100 * score))
@@ -146,5 +159,8 @@ def train_cap(cfg):
             print('duration_of_1by1:', duration / 60, epoch)
             sys.stdout.flush()
 
+            if (num_epoch_best_metric_unchanged == cfg.early_stop_after):
+                break
+
     print(f'{cfg.curr_time}')
-    print(f'best {cfg.key_metric}: %2.4f at epoch {best_epoch}' % (best_metric * 100))
+    print(f'best val_loss: %2.4f at epoch {best_epoch}' % (best_metric * 100))

@@ -40,7 +40,7 @@ def eval_cap(cfg):
     #     model = BiModalTransformer(model_cfg, test_dataset)
     # elif cfg.modality in ['video', 'audio']:
     #     model = Transformer(model_cfg, test_dataset)
-    model = AVSDTan(cfg, test_dataset)
+    model = AVSDTan(model_cfg, test_dataset)
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)
@@ -58,6 +58,5 @@ def eval_cap(cfg):
     print ('-' * 25)
 
     if cfg.wandb:
-        for metric, score in metrics.items():
-            wandb.log({f'test/{metric}': score * 100})
+        wandb.log({f'test/{metric}': score * 100 for metric, score in metrics.items()})
                 

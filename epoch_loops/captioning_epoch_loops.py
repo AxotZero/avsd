@@ -61,6 +61,7 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
             raise Exception(f'Unknown modality: {modality}')
         
         # for each QA turn, only last if last_only
+        
         s = 0 if not last_only else start_pos.size(-1)-1
         for t in range(s, start_pos.size(1)):
             # store source information
@@ -85,11 +86,11 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
             out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
             pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
             end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
-            attw = None
+            
             batch_indices = torch.arange(B, dtype=torch.long, device=device)
-
             map2d = None
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
+                
                 # masks = make_masks(feature_stacks, trg, modality, pad_idx)
                 pad_mask, text_mask = make_text_masks(trg, pad_idx)
                 preds, attn, map2d = model(feature_stacks, trg, pad_mask, text_mask, map2d, ret_map2d=True)
@@ -257,7 +258,7 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
         tan_loss = tan_criterion(attn, batch['tan_label'])
 
-        loss = gen_loss + tan_loss
+        loss = gen_loss + tan_loss*0
         loss.backward()
 
         if cfg.grad_clip is not None:
@@ -409,7 +410,8 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
                 ilen = input_lengths[b]
                 s, e = get_valid_position(cfg.num_seg)[int(torch.argmax(attw))]
                 start_time = s / cfg.num_seg
-                end_time = e / cfg.num_seg
+                # end_time = e / cfg.num_seg
+                end_time = (e+1) / cfg.num_seg
                 # attw_mean = torch.mean(attw[:len(strings2)], dim=0)[:ilen]
                 # frame_indices = torch.arange(ilen, dtype=torch.float) / ilen  # relative frame positions
                 # frame_mean = float((frame_indices * attw_mean).sum())  # expected value of attended frame
@@ -421,7 +423,7 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
         ### ADDING RESULTS TO THE DICT WITH RESULTS
         for video_id, start, end, sents in zip(batch['video_ids'], batch['starts'], batch['ends'],
                                                list_of_lists_with_filtered_sentences):
-            # bp()
+            # 
             segment = []
             if cfg.last_only:
                 for i in range(len(batch['starts'])-1):

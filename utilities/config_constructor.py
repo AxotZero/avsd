@@ -115,4 +115,6 @@ class Config(object):
             self.log_dir = None
             self.log_path = None
         
+        self.seg_method = args.seg_method
         self.wandb = args.wandb
+        self.no_sen_fusion = args.no_sen_fusion

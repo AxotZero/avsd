@@ -5,7 +5,7 @@ import torch.nn as nn
 class GRU(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-
+            
         self.gru = nn.GRU(
             input_size = cfg.d_model, 
             hidden_size = cfg.d_model*4, 

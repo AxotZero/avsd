@@ -1,12 +1,13 @@
 import argparse
 from pprint import pprint
+import torch
 
 from utilities.config_constructor import Config
 from scripts.train_captioning_module import train_cap
 from scripts.eval_captioning_module import eval_cap
 
-
 def main(cfg):
+    torch.multiprocessing.set_sharing_strategy('file_system')
     if 'train' in cfg.procedure:
         train_cap(cfg)
     if 'test' in cfg.procedure:
@@ -68,7 +69,7 @@ def get_parser():
     parser.add_argument('--num_workers', type=int, default=0, help='number of num_workers')
     parser.add_argument('--one_by_one_starts_at', type=int, default=1,
                         help='# of epochs to skip before starting 1-by-1 validation (saves time)')
-    parser.add_argument('--early_stop_after', type=int, default=30,
+    parser.add_argument('--early_stop_after', type=int, default=5,
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument('--key-metric', type=str, default='Bleu_4',
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
@@ -136,7 +137,10 @@ def get_parser():
     parser.add_argument('--num_seg', type=int, default=64)
     parser.add_argument('--cnn_kernel_size', type=int, default=9)
     parser.add_argument('--num_cnn_layer', type=int, default=4)
+    parser.add_argument('--seg_method', type=str, choices=['mean', 'max', 'sample'], default='mean')
     parser.add_argument('--wandb', action='store_true')
+    parser.add_argument('--no_sen_fusion', action='store_true')
+    
 
     parser.set_defaults(to_log=True)
     return parser

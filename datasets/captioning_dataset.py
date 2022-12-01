@@ -1,4 +1,5 @@
 import ast
+import random
 
 import pandas as pd
 import torch
@@ -224,7 +225,14 @@ class AudioVideoFeaturesDataset(Dataset):
         if method == 'mean':
             func = torch.mean
         elif method == 'max':
-            func = torch.max
+            def foo(x, dim):
+                return torch.max(x, dim=dim)[0]
+            func = foo
+        elif method == 'sample':
+            def foo(x, dim=0):
+                return random.choice(x)
+
+            func = foo
         else:
             raise Exception('method should be one of ["mean", "max"]')
         
@@ -294,9 +302,9 @@ class AudioVideoFeaturesDataset(Dataset):
             
             # if self.tan:
                 # build clip features
-            vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg)
-            vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg)
-            aud_stack = self.get_seg_feats(aud_stack, self.num_seg)
+            vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg, method=self.cfg.seg_method)
+            vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg, method=self.cfg.seg_method)
+            aud_stack = self.get_seg_feats(aud_stack, self.num_seg, method=self.cfg.seg_method)
             valid_position = get_valid_position(self.num_seg)
 
             if type(seq_start) == str and  seq_start.startswith('['):

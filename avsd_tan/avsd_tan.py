@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from model.blocks import (FeatureEmbedder, Identity,
                           PositionalEncoder, VocabularyEmbedder)
-from model.generators import Generator
+from model.generators import Generator, GruGenerator
 from .av_fusion import AVFusion
 from .tan import TAN
 from .decoder import Decoder 
@@ -33,6 +33,13 @@ class AVSDTan(nn.Module):
         self.pos_enc_A = PositionalEncoder(cfg.d_model, cfg.dout_p)
         self.pos_enc_V = PositionalEncoder(cfg.d_model, cfg.dout_p)
         self.pos_enc_C = PositionalEncoder(cfg.d_model, cfg.dout_p)
+        # self.drop_A = nn.Dropout(0.5)
+        # self.drop_V = nn.Dropout(0.5)
+        # self.drop_T = nn.Dropout(0.3)
+
+        self.drop_A = nn.Dropout(0)
+        self.drop_V = nn.Dropout(0)
+        self.drop_T = nn.Dropout(0)
 
         # encode word embedding
         self.gru = GRU(cfg)
@@ -43,6 +50,7 @@ class AVSDTan(nn.Module):
         self.decoder = Decoder(cfg)
 
         self.generator = Generator(cfg.d_model, train_dataset.trg_voc_size)
+        # self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
 
 
     def forward(self, feats, text, padding_mask=None, text_mask=None, map2d=None, ret_map2d=False):
@@ -54,7 +62,7 @@ class AVSDTan(nn.Module):
 
         # get sent feat
         C = text
-        C = self.pos_enc_C(self.emb_C(C)) # bs, num_word, d_cap
+        C = self.pos_enc_C(self.drop_T(self.emb_C(C))) # bs, num_word, d_cap
         C = self.gru(C) # bs, num_word, d_cap
 
         if map2d is not None:
@@ -63,6 +71,8 @@ class AVSDTan(nn.Module):
             # get av feature
             V = feats['rgb'] + feats['flow']
             A = feats['audio']
+            V = self.drop_V(V)
+            A = self.drop_A(A)
             
             # get mask for sentence_feature
             sent_mask = (text == self.context_end_idx)

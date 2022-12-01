@@ -18,6 +18,7 @@ class DecoderCrossAttention(nn.Module):
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
         self.norm = nn.LayerNorm(cfg.d_model)
+        self.dropout = nn.Dropout(cfg.dout_p)
     
     def forward(self, text, av_feat, attn_sent_index):
         """
@@ -47,6 +48,7 @@ class DecoderCrossAttention(nn.Module):
         attn = (q*k).sum(-1, keepdim=True)
         attn = attn / np.sqrt(d_k) # bs, num_word, num_valid, num_head, 1
         attn = F.sigmoid(attn)
+        attn = self.dropout(attn)
         # attn = F.softmax(attn, dim=-3)
 
         # model output
