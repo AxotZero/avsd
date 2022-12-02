@@ -259,7 +259,7 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
         tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
 
-        loss = gen_loss + tan_loss*0
+        loss = gen_loss + tan_loss
         loss.backward()
 
         if cfg.grad_clip is not None:

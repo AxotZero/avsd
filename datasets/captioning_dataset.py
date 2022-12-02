@@ -213,6 +213,7 @@ class AudioVideoFeaturesDataset(Dataset):
         
         self.video_feature_size = 2048
         self.audio_feature_size = 128
+        self.max_feature_seq_len = 512
 
         # self.tan = cfg.tan
         # if self.tan:

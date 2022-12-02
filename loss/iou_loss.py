@@ -25,8 +25,8 @@ class TanLoss(object):
 
         ious = self.scale(ious).clamp(0, 1)
 
-        loss_pos = -1 * torch.mean(ious * torch.log(scores + self.epsilon) * (1-self.iou_mean))
-        loss_neg = -1 * torch.mean((1-ious) * torch.log((1-scores) + self.epsilon) * self.iou_mean)
+        loss_pos = -1 * torch.mean(ious * torch.log(scores + self.epsilon) * (1-self.iou_mean)) * 2
+        loss_neg = -1 * torch.mean((1-ious) * torch.log((1-scores) + self.epsilon) * self.iou_mean) * 2
         loss = loss_pos + loss_neg
         return loss
 
