@@ -9,8 +9,8 @@ def clamp(v, _min, _max):
     return max(_min, min(v, _max))
 
 
-def generate_csv(duration_file,inp_json,phase,output_csv):
-    df1=pd.read_csv(duration_file,sep=' ',header=None)
+def generate_csv(duration_file, inp_json, phase, output_csv):
+    df1 = pd.read_csv(duration_file,sep=' ',header=None)
     f=open(inp_json,'r')
     d1=json.loads(f.read())
 
@@ -57,10 +57,10 @@ def generate_csv(duration_file,inp_json,phase,output_csv):
                                 mask = 1
                             ss.append(s)
                             es.append(e)
-
                         masks.append(mask)
                         starts.append(ss)
                         ends.append(es)
+
                 d['train_mask'] = masks
                 d['seq_start'] = starts
                 d['seq_end'] = ends
@@ -79,4 +79,4 @@ def generate_csv(duration_file,inp_json,phase,output_csv):
     #pdb.set_trace()
 
 if __name__=="__main__":
-    generate_csv(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4])
+    generate_csv(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

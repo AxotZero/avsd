@@ -8,7 +8,7 @@ from torch.utils.data.dataset import Dataset
 from torchtext import data
 
 from datasets.load_features import fill_missing_features, load_features_from_npy
-from avsd_tan.utils import get_valid_position, iou
+from avsd_tan.utils import get_valid_position, compute_iou, get_valid_position_norm
 
 def caption_iterator(cfg, batch_size, phase):
     print(f'Contructing caption_iterator for "{phase}" phase')
@@ -30,6 +30,7 @@ def caption_iterator(cfg, batch_size, phase):
         ('duration', None),
         ('seq_start', None),
         ('seq_end', None),
+        ('train_mask', None),
         ('phase', None),
         ('idx', INDEX),
     ]
@@ -265,11 +266,12 @@ class AudioVideoFeaturesDataset(Dataset):
         video_ids, captions, starts, ends = [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
         sents_iou_target_stacks = []
+        train_masks = []
         
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+            video_id, caption, start, end, duration, seq_start, seq_end, train_mask, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.feature_pkl, self.cfg, 
@@ -297,26 +299,30 @@ class AudioVideoFeaturesDataset(Dataset):
             vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg, method=self.cfg.seg_method)
             vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg, method=self.cfg.seg_method)
             aud_stack = self.get_seg_feats(aud_stack, self.num_seg, method=self.cfg.seg_method)
-            valid_position = get_valid_position(self.num_seg)
+            valid_position_norm = get_valid_position_norm(self.num_seg)
 
-            if type(seq_start) == str and  seq_start.startswith('['):
+            if type(seq_start) == str and seq_start.startswith('['):
                 seq_start = ast.literal_eval(seq_start)
                 seq_end = ast.literal_eval(seq_end)
+                train_mask = ast.literal_eval(train_mask)
             else:
-                seq_start = [-1]
-                seq_end = [-1]
+                seq_start = [[-1]]
+                seq_end = [[-1]]
+                train_mask = [-1]
 
             sents_iou_target = []
 
             for starts, ends in zip(seq_start, seq_end):
-                s = s / duration
-                e = e / duration
-                iou_target = []
-                for vs, ve in valid_position:
-                    vs = vs / self.num_seg
-                    ve = (ve+1) / self.num_seg
-                    iou_target.append(iou((s, e), (vs, ve)))
-                sents_iou_target.append(iou_target)
+                ious_target = []
+                for vs, ve in valid_position_norm:
+                    max_iou_of_vp = 0
+                    for s, e in zip(starts, ends):
+                        s = s / duration
+                        e = e / duration
+                        iou = compute_iou((s, e), (vs, ve))
+                        max_iou_of_vp = max(max_iou_of_vp, iou)
+                    ious_target.append(max_iou_of_vp)
+                sents_iou_target.append(ious_target)
                 
 
             # append info for this index to the lists
@@ -327,6 +333,7 @@ class AudioVideoFeaturesDataset(Dataset):
             vid_stacks_rgb.append(vid_stack_rgb)
             vid_stacks_flow.append(vid_stack_flow)
             aud_stacks.append(aud_stack)
+            train_masks.append(train_mask)
 
             # if self.tan:
             sents_iou_target_stacks.append(sents_iou_target)
@@ -343,6 +350,7 @@ class AudioVideoFeaturesDataset(Dataset):
 
         starts = torch.tensor(starts).unsqueeze(1)
         ends = torch.tensor(ends).unsqueeze(1)
+        train_masks = torch.tensor(train_masks).bool()
 
         batch_dict = {
             'video_ids': video_ids,
@@ -354,7 +362,8 @@ class AudioVideoFeaturesDataset(Dataset):
                 'flow': vid_stacks_flow,
                 'audio': aud_stacks,
             },
-            'tan_label': torch.tensor(sents_iou_target_stacks) # bs, num_sent, num_valid
+            'tan_label': torch.tensor(sents_iou_target_stacks), # bs, num_sent, num_valid
+            'train_mask': train_masks # bs, num_sent
         }
 
         return batch_dict

@@ -4,10 +4,10 @@
 
 datapath=data/features
 
-exp_name=bs8_d256_w1e-4_pre0.5
+exp_name=iou_fix_imbalance
 
 ## procedure
-procedure='test'
+procedure='train_test'
 # procedure='train'
 # procedure='test'
 
@@ -15,16 +15,18 @@ procedure='test'
 seg_method='sample'
 num_seg=32
 cnn_kernel_size=5
-num_cnn_layer=4
+num_cnn_layer=2
 num_layers=2
-d_model=128
+d_model=256
 dout_p=0.1
-weight_decay=0.00001
+weight_decay=0.0001
 # no_sen_fusion='--no_sen_fusion'
 no_sen_fusion=''
+min_iou=0.0
+max_iou=1.0
 
 ## training 
-device_ids='2 3'
+device_ids='2 3 4 5'
 batch_size=2 # per device
 num_workers=2
 epoch_num=60
@@ -35,11 +37,10 @@ one_by_one_starts_at=55
 debug=""
 # dont_log="--dont_log"
 dont_log=""
-# debug=""
 # last_only="--last_only"
 last_only=""
-# wandb="--wandb"
-wandb=""
+wandb="--wandb"
+# wandb=""
 
 train_set=./data/train_set4DSTC8-AVSD+reason.json
 val_set=./data/valid_set4DSTC10-AVSD+reason.json
@@ -55,8 +56,9 @@ log_dir=./log
 echo "Coverting json files to csv for the tool"
 python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
 python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
-python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set test $test_csv
-return
+python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
+# return
+
 # train
 echo Start training
 python main.py \
@@ -86,6 +88,8 @@ python main.py \
  --seg_method $seg_method \
  --no_sen_fusion $no_sen_fusion \
  --weight_decay $weight_decay \
+ --min_iou $min_iou \
+ --max_iou $max_iou \
  $debug \
  $dont_log \
  $last_only \

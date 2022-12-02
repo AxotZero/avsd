@@ -52,8 +52,8 @@ def combine(phase='train'):
 
         train_df = pd.read_csv(TRAIN_DF_PATH, sep='\t').iloc[:100]
         valid_df = pd.read_csv(VALID_DF_PATH, sep='\t').iloc[:20]
-        train_df.to_csv(f'{DATA_DIR}/dstc10_train_debug.csv')
-        valid_df.to_csv(f'{DATA_DIR}/dstc10_val_debug.csv')
+        train_df.to_csv(f'{DATA_DIR}/dstc10_train_debug.csv', sep='\t', index=None)
+        valid_df.to_csv(f'{DATA_DIR}/dstc10_val_debug.csv', sep='\t', index=None)
 
         debug_ids = list(train_df.video_id) + list(valid_df.video_id)
         debug_dict = {video_id:d[video_id] for video_id in debug_ids}

@@ -118,3 +118,5 @@ class Config(object):
         self.seg_method = args.seg_method
         self.wandb = args.wandb
         self.no_sen_fusion = args.no_sen_fusion
+        self.min_iou = args.min_iou
+        self.max_iou = args.max_iou

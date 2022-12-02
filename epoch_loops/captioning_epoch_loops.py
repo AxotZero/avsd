@@ -228,6 +228,7 @@ def batch_to_device(batch, device):
     batch['feature_stacks']['audio'] = batch['feature_stacks']['audio'].to(device)
     batch['caption'] = batch['caption'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
+    batch['train_mask'] = batch['train_mask'].to(device)
     return batch
 
 
@@ -256,7 +257,7 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
         gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-        tan_loss = tan_criterion(attn, batch['tan_label'])
+        tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
 
         loss = gen_loss + tan_loss*0
         loss.backward()
@@ -314,7 +315,7 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
             n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
             gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-            tan_loss = tan_criterion(attn, batch['tan_label'])
+            tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
 
             loss = gen_loss + tan_loss
 

@@ -11,6 +11,7 @@ from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
 from avsd_tan.avsd_tan import AVSDTan
+from utils.combine_files import load_pickle
 
 import wandb
 
@@ -65,7 +66,8 @@ def train_cap(cfg):
     model = AVSDTan(cfg, train_dataset)
 
     gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
-    tan_criterion = TanLoss()
+    iou_mean = load_pickle(f'data/iou_mean_{cfg.min_iou:.1f}-{cfg.max_iou:.1f}_{cfg.num_seg}.pkl')
+    tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
     
     if cfg.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,

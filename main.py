@@ -140,8 +140,9 @@ def get_parser():
     parser.add_argument('--seg_method', type=str, choices=['mean', 'max', 'sample'], default='mean')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--no_sen_fusion', action='store_true')
+    parser.add_argument('--min_iou', type=float, default=0.5)
+    parser.add_argument('--max_iou', type=float, default=1.0)
     
-
     parser.set_defaults(to_log=True)
     return parser
 
