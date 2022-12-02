@@ -59,6 +59,6 @@ def combine(phase='train'):
         debug_dict = {video_id:d[video_id] for video_id in debug_ids}
         save_pickle(debug_dict, f'{FEAT_DIR}/train_debug.pkl')
 
-
-combine('train')
-combine('test')
+if __name__ == '__main__':
+    combine('train')
+    combine('test')

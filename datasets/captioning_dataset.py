@@ -8,7 +8,7 @@ from torch.utils.data.dataset import Dataset
 from torchtext import data
 
 from datasets.load_features import fill_missing_features, load_features_from_npy
-from avsd_tan.utils import get_valid_position
+from avsd_tan.utils import get_valid_position, iou
 
 def caption_iterator(cfg, batch_size, phase):
     print(f'Contructing caption_iterator for "{phase}" phase')
@@ -197,7 +197,8 @@ class VGGishFeaturesDataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-    
+
+
 class AudioVideoFeaturesDataset(Dataset):
     
     def __init__(self, feature_pkl, meta_path, device, pad_idx, get_full_feat, cfg):
@@ -260,14 +261,6 @@ class AudioVideoFeaturesDataset(Dataset):
                 seq_idx = round(seq_float_idx)
         return ret
 
-    def iou(self, interval_1, interval_2):
-        start_i, end_i = interval_1[0], interval_1[1]
-        start, end = interval_2[0], interval_2[1]
-        intersection = max(0, min(end, end_i) - max(start, start_i))
-        union = min(max(end, end_i) - min(start, start_i), end-start + end_i-start_i)
-        iou = float(intersection) / (union + 1e-8)
-        return iou
-
     def __getitem__(self, indices):
         video_ids, captions, starts, ends = [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
@@ -300,8 +293,7 @@ class AudioVideoFeaturesDataset(Dataset):
                 # print(f'Audio is None. Zero (1, D) @: {video_id}')
                 aud_stack = fill_missing_features('zero', self.audio_feature_size)
             
-            # if self.tan:
-                # build clip features
+            
             vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg, method=self.cfg.seg_method)
             vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg, method=self.cfg.seg_method)
             aud_stack = self.get_seg_feats(aud_stack, self.num_seg, method=self.cfg.seg_method)
@@ -311,16 +303,19 @@ class AudioVideoFeaturesDataset(Dataset):
                 seq_start = ast.literal_eval(seq_start)
                 seq_end = ast.literal_eval(seq_end)
             else:
-                seq_start = [0]
-                seq_end = [0]
+                seq_start = [-1]
+                seq_end = [-1]
 
             sents_iou_target = []
-            for s, e in zip(seq_start, seq_end):
-                s_frame = round(s / duration * self.num_seg)
-                e_frame = round(e / duration * self.num_seg)
+
+            for starts, ends in zip(seq_start, seq_end):
+                s = s / duration
+                e = e / duration
                 iou_target = []
-                for va in valid_position:
-                    iou_target.append(self.iou((s_frame, e_frame), va))
+                for vs, ve in valid_position:
+                    vs = vs / self.num_seg
+                    ve = (ve+1) / self.num_seg
+                    iou_target.append(iou((s, e), (vs, ve)))
                 sents_iou_target.append(iou_target)
                 
 

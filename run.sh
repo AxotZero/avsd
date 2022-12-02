@@ -56,7 +56,7 @@ echo "Coverting json files to csv for the tool"
 python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
 python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
 python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set test $test_csv
-
+return
 # train
 echo Start training
 python main.py \
