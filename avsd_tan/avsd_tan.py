@@ -3,22 +3,22 @@
 # import os
 # # print(os.getcwd())
 # # sys.path.append(os.path.abspath("/media/hd03/axot_data/AVSD-DSTC10_baseline/model"))
-
+from pdb import set_trace as bp
 import torch
 import torch.nn as nn
 
-from model.blocks import (FeatureEmbedder, Identity,
-                          PositionalEncoder, VocabularyEmbedder)
 from model.generators import Generator, GruGenerator
-from .av_fusion import AVFusion
+from .av_encoder import AVEncoder, AVFusion, AVMapping
 from .tan import TAN
 from .decoder import Decoder 
 from .rnn import GRU
+from .text_encoder import TextEncoder
 
 
 class AVSDTan(nn.Module):
     def __init__(self, cfg, train_dataset):
         super().__init__()
+        vocab_size = train_dataset.trg_voc_size
         self.d_model = cfg.d_model
         self.last_only = cfg.last_only
         # margin of sentence
@@ -27,33 +27,22 @@ class AVSDTan(nn.Module):
         self.context_end_idx = train_dataset.context_end_idx
 
         # encode features
-        self.emb_A = FeatureEmbedder(cfg.d_aud, cfg.d_model)
-        self.emb_V = FeatureEmbedder(cfg.d_vid, cfg.d_model)
-        self.emb_C = VocabularyEmbedder(train_dataset.trg_voc_size, cfg.d_model)
-        self.pos_enc_A = PositionalEncoder(cfg.d_model, cfg.dout_p)
-        self.pos_enc_V = PositionalEncoder(cfg.d_model, cfg.dout_p)
-        self.pos_enc_C = PositionalEncoder(cfg.d_model, cfg.dout_p)
-        # self.drop_A = nn.Dropout(0.5)
-        # self.drop_V = nn.Dropout(0.5)
-        # self.drop_T = nn.Dropout(0.3)
-
-        self.drop_A = nn.Dropout(0)
-        self.drop_V = nn.Dropout(0)
-        self.drop_T = nn.Dropout(0)
+        self.text_encoder = TextEncoder(cfg, vocab_size)
 
         # encode word embedding
-        self.gru = GRU(cfg)
-
+        self.av_encoder = AVEncoder(cfg)
         self.av_fusion = AVFusion(cfg)
         self.tan = TAN(cfg)
 
         self.decoder = Decoder(cfg)
 
-        self.generator = Generator(cfg.d_model, train_dataset.trg_voc_size)
-        # self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
+        # self.generator = Generator(cfg.d_model, vocab_size)
+        self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
 
 
-    def forward(self, feats, text, padding_mask=None, text_mask=None, map2d=None, ret_map2d=False):
+    def forward(self, 
+                feats, text, visual_mask=None, audio_mask=None,
+                padding_mask=None, text_mask=None, map2d=None, ret_map2d=False):
         if padding_mask is None:
             padding_mask = (text != self.pad_idx).bool()
         if text_mask is None:
@@ -61,31 +50,22 @@ class AVSDTan(nn.Module):
             text_mask = text.new_ones((bs, num_word, num_word))
 
         # get sent feat
-        C = text
-        C = self.pos_enc_C(self.drop_T(self.emb_C(C))) # bs, num_word, d_cap
-        C = self.gru(C) # bs, num_word, d_cap
-
+        C = self.text_encoder(text) # bs, num_word, d_model
         if map2d is not None:
             AV = map2d
         else:
-            # get av feature
-            V = feats['rgb'] + feats['flow']
-            A = feats['audio']
-            V = self.drop_V(V)
-            A = self.drop_A(A)
-            
-            # get mask for sentence_feature
+            # sentence mask
             sent_mask = (text == self.context_end_idx)
+
+            # get av feature
+            V, A = self.av_encoder(
+                feats['rgb'], feats['flow'], feats['audio'], 
+                vis_mask=~visual_mask, aud_mask=~audio_mask
+            ) # bs, num_seg, d_video for A and V
+
             
-            # extract embedding
-            A = self.pos_enc_A(self.emb_A(A)) # bs, num_seg, d_audio
-            V = self.pos_enc_V(self.emb_V(V)) # bs, num_seg, d_video
-            
-            # get sentence embedding
-            # Warning: if it is test mode, batch size should be 1 or last_only should be True
+            # get sentence embedding, if it is test mode, batch size should be 1
             S = C[sent_mask.bool()].view(C.size()[0], -1, self.d_model) # bs, num_sent, d_dim
-            # if self.last_only:
-            #     S = S[:, [-1]]
             
             # get 2d_tan feature
             AV = self.av_fusion(A, V, S) # bs, num_sen, num_seg, d_model

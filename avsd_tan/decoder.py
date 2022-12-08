@@ -17,7 +17,7 @@ class DecoderCrossAttention(nn.Module):
         self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
-        self.norm = nn.LayerNorm(cfg.d_model)
+        # self.norm = nn.LayerNorm(cfg.d_model)
         self.dropout = nn.Dropout(cfg.dout_p)
     
     def forward(self, text, av_feat, attn_sent_index):
@@ -43,18 +43,18 @@ class DecoderCrossAttention(nn.Module):
         # for k and v, get the corresponding feature map of each word for text
         batch_indices = [[i] for i in range(bs)]
         k = k[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k
-        v = v[[batch_indices, attn_sent_index]] 
+        v = v[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k
 
         attn = (q*k).sum(-1, keepdim=True)
         attn = attn / np.sqrt(d_k) # bs, num_word, num_valid, num_head, 1
         attn = F.sigmoid(attn)
-        attn = self.dropout(attn)
         # attn = F.softmax(attn, dim=-3)
 
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
-        out = self.norm(out)
+        # out = self.norm(out)
+        out = F.normalize(out, dim=-1)
         
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
@@ -107,7 +107,7 @@ class DecoderLayer(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.layers = nn.ModuleList([DecoderLayer(cfg) for _ in range(cfg.num_layer)])
+        self.layers = nn.ModuleList([DecoderLayer(cfg) for _ in range(cfg.num_decoder_layers)])
     
     def compute_sentence_attn_w(self, attn, padding_mask, attn_sent_index):
         """

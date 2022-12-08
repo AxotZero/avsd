@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from datasets.captioning_dataset import AVSD10Dataset
 from epoch_loops.captioning_epoch_loops import (greedy_decoder, teacher_forced_decoder, save_model, training_loop, validation_1by1_loop, validation_next_word_loop)
 from loss.label_smoothing import LabelSmoothing
-from loss.iou_loss import TanLoss
+from loss.iou_loss import TanLoss, TanIouMeanLoss
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
@@ -25,7 +25,8 @@ def train_cap(cfg):
                 'lr': cfg.lr,
                 'bs': cfg.train_batch_size,
                 'd_model': cfg.d_model,
-                'num_layer': cfg.num_layer,
+                'num_encoder_layers': cfg.num_encoder_layers,
+                'num_decoder_layers': cfg.num_decoder_layers,
                 'num_head': cfg.num_head,
                 'num_seg': cfg.num_seg,
                 'num_cnn_layer': cfg.num_cnn_layer,
@@ -67,7 +68,8 @@ def train_cap(cfg):
 
     gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
     iou_mean = load_pickle(f'data/iou_mean_{cfg.min_iou:.1f}-{cfg.max_iou:.1f}_{cfg.num_seg}.pkl')
-    tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
+    # tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
+    tan_criterion = TanIouMeanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
     
     if cfg.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,

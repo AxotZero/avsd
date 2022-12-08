@@ -61,7 +61,7 @@ def load_features_from_npy(feature_pkl, cfg, video_id, start, end, duration,
     # get audio feature
     try:
         stack_vggish = feature_pkl[video_id]['audio']
-        stack_vggish = torch.from_numpy(stack_vggish).float()
+        stack_vggish = torch.tensor(stack_vggish.tolist()).float()
 
         if get_full_feat:
             stacks['orig_feat_length']['audio'] = stack_vggish.shape[0]
@@ -84,8 +84,8 @@ def load_features_from_npy(feature_pkl, cfg, video_id, start, end, duration,
                 stack_flow = np.concatenate((stack_flow,z),axis=0)
             else:
                 stack_rgb = np.concatenate((stack_rgb,z),axis=0)
-        stack_rgb = torch.from_numpy(stack_rgb).float()
-        stack_flow = torch.from_numpy(stack_flow).float()
+        stack_rgb = torch.tensor(stack_rgb.tolist()).float()
+        stack_flow = torch.tensor(stack_flow.tolist()).float()
         if get_full_feat:
             stacks['orig_feat_length']['rgb'] = stack_rgb.shape[0]
             stacks['orig_feat_length']['flow'] = stack_flow.shape[0]

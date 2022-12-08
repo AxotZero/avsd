@@ -10,7 +10,7 @@ if __name__ == '__main__':
                 'lr': cfg.lr,
                 'bs': cfg.train_batch_size,
                 'd_model': cfg.d_model,
-                'num_layer': cfg.num_layer,
+                'num_encoder_layers': cfg.num_encoder_layers,
                 'num_head': cfg.num_head,
                 'num_seg': cfg.num_seg,
                 'num_cnn_layer': cfg.num_cnn_layer,

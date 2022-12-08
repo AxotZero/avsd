@@ -8,13 +8,13 @@ class GRU(nn.Module):
             
         self.gru = nn.GRU(
             input_size = cfg.d_model, 
-            hidden_size = cfg.d_model*4, 
-            num_layers = 3,
+            hidden_size = cfg.d_model*2, 
+            num_layers = cfg.num_decoder_layers,
             batch_first=True,
             dropout = cfg.dout_p
         )
         self.dropout = nn.Dropout(cfg.dout_p)
-        self.ff = nn.Linear(cfg.d_model*4, cfg.d_model)
+        self.ff = nn.Linear(cfg.d_model*2, cfg.d_model)
     
     def forward(self, x):
         self.gru.flatten_parameters()

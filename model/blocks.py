@@ -96,7 +96,7 @@ class PositionalEncoder(nn.Module):
             pos_enc_mat[pos, odds] = np.sin(pos / (10000 ** (odds / d_model)))
             pos_enc_mat[pos, evens] = np.cos(pos / (10000 ** (evens / d_model)))
 
-        self.pos_enc_mat = torch.from_numpy(pos_enc_mat).unsqueeze(0)
+        self.pos_enc_mat = torch.tensor(pos_enc_mat).unsqueeze(0)
 
     def forward(self, x):
         B, S, d_model = x.shape

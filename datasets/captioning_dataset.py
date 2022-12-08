@@ -3,12 +3,12 @@ import random
 
 import pandas as pd
 import torch
-from torch.nn.utils.rnn import pad_sequence
+from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence
 from torch.utils.data.dataset import Dataset
 from torchtext import data
 
 from datasets.load_features import fill_missing_features, load_features_from_npy
-from avsd_tan.utils import get_valid_position, compute_iou, get_valid_position_norm
+from avsd_tan.utils import compute_iou, get_valid_position_norm, get_seg_feats
 
 def caption_iterator(cfg, batch_size, phase):
     print(f'Contructing caption_iterator for "{phase}" phase')
@@ -67,137 +67,137 @@ def caption_iterator(cfg, batch_size, phase):
     return train_vocab, datasetloader
 
 
-class I3DFeaturesDataset(Dataset):
+# class I3DFeaturesDataset(Dataset):
     
-    def __init__(self, features_path, feature_name, meta_path, device, pad_idx, get_full_feat, cfg):
-        self.cfg = cfg
-        self.features_path = features_path
-        self.feature_name = f'{feature_name}_features'
-        self.feature_names_list = [self.feature_name]
-        self.device = device
-        self.dataset = pd.read_csv(meta_path, sep='\t')
-        self.pad_idx = pad_idx
-        self.get_full_feat = get_full_feat
+#     def __init__(self, features_path, feature_name, meta_path, device, pad_idx, get_full_feat, cfg):
+#         self.cfg = cfg
+#         self.features_path = features_path
+#         self.feature_name = f'{feature_name}_features'
+#         self.feature_names_list = [self.feature_name]
+#         self.device = device
+#         self.dataset = pd.read_csv(meta_path, sep='\t')
+#         self.pad_idx = pad_idx
+#         self.get_full_feat = get_full_feat
         
-        if self.feature_name == 'i3d_features':
-            self.feature_size = 2048
-        else:
-            raise Exception(f'Inspect: "{self.feature_name}"')
+#         if self.feature_name == 'i3d_features':
+#             self.feature_size = 2048
+#         else:
+#             raise Exception(f'Inspect: "{self.feature_name}"')
     
-    def __getitem__(self, indices):
-        video_ids, captions, starts, ends, vid_stacks_rgb, vid_stacks_flow = [], [], [], [], [], []
+#     def __getitem__(self, indices):
+#         video_ids, captions, starts, ends, vid_stacks_rgb, vid_stacks_flow = [], [], [], [], [], []
 
-        for idx in indices:
-            idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+#         for idx in indices:
+#             idx = idx.item()
+#             video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
             
-            stack = load_features_from_npy(
-                self.cfg, self.feature_names_list, video_id, start, end, duration, 
-                self.pad_idx, self.get_full_feat
-            )
+#             stack = load_features_from_npy(
+#                 self.cfg, self.feature_names_list, video_id, start, end, duration, 
+#                 self.pad_idx, self.get_full_feat
+#             )
 
-            vid_stack_rgb, vid_stack_flow = stack['rgb'], stack['flow']
+#             vid_stack_rgb, vid_stack_flow = stack['rgb'], stack['flow']
             
-            # either both None or both are not None (Boolean Equivalence)
-            both_are_None = vid_stack_rgb is None and vid_stack_flow is None
-            none_is_None = vid_stack_rgb is not None and vid_stack_flow is not None
-            assert both_are_None or none_is_None
+#             # either both None or both are not None (Boolean Equivalence)
+#             both_are_None = vid_stack_rgb is None and vid_stack_flow is None
+#             none_is_None = vid_stack_rgb is not None and vid_stack_flow is not None
+#             assert both_are_None or none_is_None
             
-            # # sometimes stack is empty after the filtering. we replace it with noise
-            if both_are_None:
-                # print(f'RGB and FLOW are None. Zero (1, D) @: {video_id}')
-                vid_stack_rgb = fill_missing_features('zero', self.feature_size)
-                vid_stack_flow = fill_missing_features('zero', self.feature_size)
+#             # # sometimes stack is empty after the filtering. we replace it with noise
+#             if both_are_None:
+#                 # print(f'RGB and FLOW are None. Zero (1, D) @: {video_id}')
+#                 vid_stack_rgb = fill_missing_features('zero', self.feature_size)
+#                 vid_stack_flow = fill_missing_features('zero', self.feature_size)
     
-            # append info for this index to the lists
-            video_ids.append(video_id)
-            captions.append(caption)
-            starts.append(start)
-            ends.append(end)
-            vid_stacks_rgb.append(vid_stack_rgb)
-            vid_stacks_flow.append(vid_stack_flow)
+#             # append info for this index to the lists
+#             video_ids.append(video_id)
+#             captions.append(caption)
+#             starts.append(start)
+#             ends.append(end)
+#             vid_stacks_rgb.append(vid_stack_rgb)
+#             vid_stacks_flow.append(vid_stack_flow)
             
-        vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
-        vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
+#         vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
+#         vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
                 
-        starts = torch.tensor(starts).unsqueeze(1)
-        ends = torch.tensor(ends).unsqueeze(1)
+#         starts = torch.tensor(starts.tolist()).unsqueeze(1)
+#         ends = torch.tensor(ends.tolist()).unsqueeze(1)
 
-        batch_dict = {
-            'video_ids': video_ids,
-            'captions': captions,
-            'starts': starts.to(self.device),
-            'ends': ends.to(self.device),
-            'feature_stacks': {
-                'rgb': vid_stacks_rgb.to(self.device),
-                'flow': vid_stacks_flow.to(self.device),
-            }
-        }
+#         batch_dict = {
+#             'video_ids': video_ids,
+#             'captions': captions,
+#             'starts': starts.to(self.device),
+#             'ends': ends.to(self.device),
+#             'feature_stacks': {
+#                 'rgb': vid_stacks_rgb.to(self.device),
+#                 'flow': vid_stacks_flow.to(self.device),
+#             }
+#         }
         
-        return batch_dict
+#         return batch_dict
 
-    def __len__(self):
-        return len(self.dataset)
+#     def __len__(self):
+#         return len(self.dataset)
     
-class VGGishFeaturesDataset(Dataset):
+# class VGGishFeaturesDataset(Dataset):
     
-    def __init__(self, features_path, feature_name, meta_path, device, pad_idx, get_full_feat, cfg):
-        self.cfg = cfg
-        self.features_path = features_path
-        self.feature_name = 'vggish_features'
-        self.feature_names_list = [self.feature_name]
-        self.device = device
-        self.dataset = pd.read_csv(meta_path, sep='\t')
-        self.pad_idx = pad_idx
-        self.get_full_feat = get_full_feat
-        self.feature_size = 128
+#     def __init__(self, features_path, feature_name, meta_path, device, pad_idx, get_full_feat, cfg):
+#         self.cfg = cfg
+#         self.features_path = features_path
+#         self.feature_name = 'vggish_features'
+#         self.feature_names_list = [self.feature_name]
+#         self.device = device
+#         self.dataset = pd.read_csv(meta_path, sep='\t')
+#         self.pad_idx = pad_idx
+#         self.get_full_feat = get_full_feat
+#         self.feature_size = 128
             
-    def __getitem__(self, indices):
-        video_ids, captions, starts, ends, aud_stacks = [], [], [], [], []
+#     def __getitem__(self, indices):
+#         video_ids, captions, starts, ends, aud_stacks = [], [], [], [], []
 
-        # [3]
-        for idx in indices:
-            idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+#         # [3]
+#         for idx in indices:
+#             idx = idx.item()
+#             video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
             
-            stack = load_features_from_npy(
-                self.cfg, self.feature_names_list, video_id, start, end, duration,
-                self.pad_idx, self.get_full_feat
-            )
-            aud_stack = stack['audio']
+#             stack = load_features_from_npy(
+#                 self.cfg, self.feature_names_list, video_id, start, end, duration,
+#                 self.pad_idx, self.get_full_feat
+#             )
+#             aud_stack = stack['audio']
             
-            # sometimes stack is empty after the filtering. we replace it with noise
-            if aud_stack is None:
-                # print(f'VGGish is None. Zero (1, D) @: {video_id}')
-                aud_stack = fill_missing_features('zero', self.feature_size)
+#             # sometimes stack is empty after the filtering. we replace it with noise
+#             if aud_stack is None:
+#                 # print(f'VGGish is None. Zero (1, D) @: {video_id}')
+#                 aud_stack = fill_missing_features('zero', self.feature_size)
     
-            # append info for this index to the lists
-            video_ids.append(video_id)
-            captions.append(caption)
-            starts.append(start)
-            ends.append(end)
-            aud_stacks.append(aud_stack)
+#             # append info for this index to the lists
+#             video_ids.append(video_id)
+#             captions.append(caption)
+#             starts.append(start)
+#             ends.append(end)
+#             aud_stacks.append(aud_stack)
             
-        # [4] see ActivityNetCaptionsDataset.__getitem__ documentation
-        aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
+#         # [4] see ActivityNetCaptionsDataset.__getitem__ documentation
+#         aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
                 
-        starts = torch.tensor(starts).unsqueeze(1)
-        ends = torch.tensor(ends).unsqueeze(1)
+#         starts = torch.tensor(starts).unsqueeze(1)
+#         ends = torch.tensor(ends).unsqueeze(1)
 
-        batch_dict = {
-            'video_ids': video_ids,
-            'captions': captions,
-            'starts': starts.to(self.device),
-            'ends': ends.to(self.device),
-            'feature_stacks': {
-                'audio': aud_stacks.to(self.device),
-            }
-        }
+#         batch_dict = {
+#             'video_ids': video_ids,
+#             'captions': captions,
+#             'starts': starts.to(self.device),
+#             'ends': ends.to(self.device),
+#             'feature_stacks': {
+#                 'audio': aud_stacks.to(self.device),
+#             }
+#         }
 
-        return batch_dict
+#         return batch_dict
 
-    def __len__(self):
-        return len(self.dataset)
+#     def __len__(self):
+#         return len(self.dataset)
 
 
 class AudioVideoFeaturesDataset(Dataset):
@@ -243,6 +243,7 @@ class AudioVideoFeaturesDataset(Dataset):
         if seq_len == num_seg:
             return feat
         
+        # mask = torch.zeros(num_seg).bool()
         ret = torch.zeros((num_seg, hidden_size))
         if seq_len < num_seg:
             ret_idx = 0
@@ -250,6 +251,7 @@ class AudioVideoFeaturesDataset(Dataset):
             ret_step = num_seg / seq_len
             for seq_idx in range(seq_len):
                 ret[ret_idx] = feat[seq_idx]
+                # mask[ret_idx] = True
                 ret_float_idx += ret_step
                 ret_idx = round(ret_float_idx)
         else:
@@ -260,9 +262,23 @@ class AudioVideoFeaturesDataset(Dataset):
                 seq_float_idx += seq_step
                 f = feat[seq_idx: round(seq_float_idx)]
                 ret[ret_idx] = func(f, dim=0)
+                # mask[ret_idx] = True
                 seq_idx = round(seq_float_idx)
+        # return ret, mask
         return ret
 
+    
+    def generate_feature_mask(self, feats_len):
+        max_feat_len = max(feats_len)
+        masks = []
+        for feat_len in feats_len:
+            mask = torch.tensor(
+                [1]*feat_len + [0]*(max_feat_len-feat_len)
+            ).bool()
+            masks.append(mask)
+        masks = torch.stack(masks, dim=0)
+        return masks
+    
     def __getitem__(self, indices):
         video_ids, captions, starts, ends = [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
@@ -272,7 +288,7 @@ class AudioVideoFeaturesDataset(Dataset):
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, train_mask, _, _ = self.dataset.iloc[idx]
+            video_id, caption, start, end, duration, seq_starts, seq_ends, train_mask, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.feature_pkl, self.cfg, 
@@ -296,28 +312,31 @@ class AudioVideoFeaturesDataset(Dataset):
                 # print(f'Audio is None. Zero (1, D) @: {video_id}')
                 aud_stack = fill_missing_features('zero', self.audio_feature_size)
             
-            
-            vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, self.num_seg, method=self.cfg.seg_method)
-            vid_stack_flow = self.get_seg_feats(vid_stack_flow, self.num_seg, method=self.cfg.seg_method)
-            aud_stack = self.get_seg_feats(aud_stack, self.num_seg, method=self.cfg.seg_method)
-            valid_position_norm = get_valid_position_norm(self.num_seg)
+            # get clip feature
+            feat_len = max(min(len(vid_stack_rgb), len(vid_stack_flow), len(aud_stack)), self.num_seg)
+            vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, feat_len, method=self.cfg.seg_method)
+            vid_stack_flow = self.get_seg_feats(vid_stack_flow, feat_len, method=self.cfg.seg_method)
+            aud_stack = self.get_seg_feats(aud_stack, feat_len, method=self.cfg.seg_method)
 
-            if type(seq_start) == str and seq_start.startswith('['):
-                seq_start = ast.literal_eval(seq_start)
-                seq_end = ast.literal_eval(seq_end)
+            # generate target
+            valid_position_norm = get_valid_position_norm(self.num_seg)
+            if type(seq_starts) == str and seq_ends.startswith('['):
+                seq_starts = ast.literal_eval(seq_starts)
+                seq_ends = ast.literal_eval(seq_ends)
                 train_mask = ast.literal_eval(train_mask)
             else:
-                seq_start = [[-1]]
-                seq_end = [[-1]]
+                seq_starts = [[-1]]
+                seq_ends = [[-1]]
                 train_mask = [-1]
 
             sents_iou_target = []
 
-            for starts, ends in zip(seq_start, seq_end):
+            for seq_start, seq_end in zip(seq_starts, seq_ends):
                 ious_target = []
                 for vs, ve in valid_position_norm:
+                    # get max iou of given valid_position
                     max_iou_of_vp = 0
-                    for s, e in zip(starts, ends):
+                    for s, e in zip(seq_start, seq_end):
                         s = s / duration
                         e = e / duration
                         iou = compute_iou((s, e), (vs, ve))
@@ -329,8 +348,8 @@ class AudioVideoFeaturesDataset(Dataset):
             # append info for this index to the lists
             video_ids.append(video_id)
             captions.append(caption)
-            starts.append(start)
-            ends.append(end)
+            starts.append(int(start))
+            ends.append(int(end))
             vid_stacks_rgb.append(vid_stack_rgb)
             vid_stacks_flow.append(vid_stack_flow)
             aud_stacks.append(aud_stack)
@@ -341,18 +360,23 @@ class AudioVideoFeaturesDataset(Dataset):
             
         # [4] see ActivityNetCaptionsDataset.__getitem__ documentation
         # rgb is padded with pad_idx; flow is padded with 0s: expected to be summed later
-        # if not self.tan:
-        # vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
-        # vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
-        # aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
-        vid_stacks_rgb = torch.stack(vid_stacks_rgb, dim=0)
-        vid_stacks_flow = torch.stack(vid_stacks_flow, dim=0)
-        aud_stacks = torch.stack(aud_stacks, dim=0)
+        vids_len = [len(v) for v in vid_stacks_rgb]
+        auds_len = [len(v) for v in aud_stacks]
+        vid_stacks_rgb = pad_sequence(vid_stacks_rgb, batch_first=True, padding_value=self.pad_idx)
+        vid_stacks_flow = pad_sequence(vid_stacks_flow, batch_first=True, padding_value=0)
+        aud_stacks = pad_sequence(aud_stacks, batch_first=True, padding_value=self.pad_idx)
+        # vid_stacks_rgb = torch.stack(vid_stacks_rgb, dim=0)
+        # vid_stacks_flow = torch.stack(vid_stacks_flow, dim=0)
+        # aud_stacks = torch.stack(aud_stacks, dim=0)
 
-        starts = torch.tensor(starts).unsqueeze(1)
-        ends = torch.tensor(ends).unsqueeze(1)
+        # generate visual and audio mask
+        vids_mask = self.generate_feature_mask(vids_len)
+        auds_mask = self.generate_feature_mask(auds_len)
+
+        starts = torch.tensor(list(starts)).unsqueeze(1)
+        ends = torch.tensor(list(ends)).unsqueeze(1)
         train_masks = torch.tensor(train_masks).bool()
-
+        
         batch_dict = {
             'video_ids': video_ids,
             'captions': captions,
@@ -363,6 +387,8 @@ class AudioVideoFeaturesDataset(Dataset):
                 'flow': vid_stacks_flow,
                 'audio': aud_stacks,
             },
+            'visual_mask': vids_mask,
+            'audio_mask': auds_mask,
             'tan_label': torch.tensor(sents_iou_target_stacks), # bs, num_sent, num_valid
             'train_mask': train_masks # bs, num_sent
         }

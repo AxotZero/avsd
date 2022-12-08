@@ -1,8 +1,59 @@
 from pdb import set_trace as bp
 from functools import lru_cache
+import random
 
 import torch
 import numpy as np
+
+
+def get_seg_feats(feats, num_seg=64, mask=None, method='mean'):
+        """
+        feat: torch.tensor, it can be audio/visual
+        method: 'mean', 'max'
+        """
+        
+        if method == 'mean':
+            func = torch.mean
+        elif method == 'max':
+            def foo(x, dim):
+                return torch.max(x, dim=dim)[0]
+            func = foo
+        elif method == 'sample':
+            def foo(x, dim=0):
+                return random.choice(x)
+
+            func = foo
+        else:
+            raise Exception('method should be one of ["mean", "max"]')
+        
+        bs, seq_len, hidden_size = feats.shape
+        if mask is not None:
+            seqs_len = (~mask).sum(dim=-1)
+        
+        rets = torch.zeros((bs, num_seg, hidden_size)).to(feats.get_device())
+        for b in range(bs):
+            feat = feats[b]
+            ret = rets[b]
+            if mask is not None:
+                seq_len = int(seqs_len[b])
+            if seq_len < num_seg:
+                ret_idx = 0
+                ret_float_idx = 0
+                ret_step = num_seg / seq_len
+                for seq_idx in range(seq_len):
+                    ret[ret_idx] = feat[seq_idx]
+                    ret_float_idx += ret_step
+                    ret_idx = round(ret_float_idx)
+            else:
+                seq_idx = 0
+                seq_float_idx = 0
+                seq_step = seq_len / num_seg
+                for ret_idx in range(num_seg):
+                    seq_float_idx += seq_step
+                    f = feat[seq_idx: round(seq_float_idx)]
+                    ret[ret_idx] = func(f, dim=0)
+                    seq_idx = round(seq_float_idx)
+        return rets
 
 
 def compute_iou(interval_1, interval_2):

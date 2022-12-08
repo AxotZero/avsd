@@ -43,7 +43,8 @@ class Config(object):
             self.key_metric = args.key_metric
 
         self.dout_p = args.dout_p
-        self.num_layer = args.num_layer
+        self.num_encoder_layers = args.num_encoder_layers
+        self.num_decoder_layers = args.num_decoder_layers
         self.use_linear_embedder = args.use_linear_embedder
         if args.use_linear_embedder:
             self.d_model_video = args.d_model_video
@@ -63,7 +64,7 @@ class Config(object):
         self.device_ids = args.device_ids
         self.device = f'cuda:{self.device_ids[0]}'
         self.train_batch_size = args.batch_size * len(self.device_ids)
-        self.inference_batch_size = args.inf_B_coeff * self.train_batch_size
+        self.inference_batch_size = self.train_batch_size
         self.num_workers = args.num_workers
         self.epoch_num = args.epoch_num
         self.one_by_one_starts_at = args.one_by_one_starts_at
@@ -120,3 +121,5 @@ class Config(object):
         self.no_sen_fusion = args.no_sen_fusion
         self.min_iou = args.min_iou
         self.max_iou = args.max_iou
+        self.gen_weight = args.gen_weight
+        self.tan_weight = args.tan_weight

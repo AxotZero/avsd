@@ -104,7 +104,7 @@ class TAN(nn.Module):
         
         bs, num_sent, num_seg, d_model = AV.size()
         # let batch processing more convinience
-        AV = AV.view(-1, num_seg, d_model)
+        AV = AV.contiguous().view(-1, num_seg, d_model)
         S = S.view(-1, d_model)
         
         # build map2d
@@ -113,6 +113,7 @@ class TAN(nn.Module):
 
         if self.no_sen_fusion:
             map2d = map2d.permute(0, 2, 3, 1)
+            map2d = F.normalize(map2d)
         else:
             S = self.encode_S(S)
             # Fuse sentence and feature by Hamard Product
@@ -127,6 +128,6 @@ class TAN(nn.Module):
         
         # return valid_position
         va = self.valid_position
-        map2d = map2d[:, :, va[:, 0], va[:, 1]] # bs, num_sent, num_valid, d_model
+        map2d = map2d[:, :, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_sent, num_valid, d_model
         
         return map2d 

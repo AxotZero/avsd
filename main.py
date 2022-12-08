@@ -57,7 +57,7 @@ def get_parser():
     parser.add_argument('--momentum', type=float, default=0.0)
     parser.add_argument('--scheduler', type=str, default='constant',
                         choices=['constant', 'reduce_on_plateau'], help='lr scheduler')
-    parser.add_argument('--lr', type=float, default=5e-5, help='lr (if scheduler is constant)')
+    parser.add_argument('--lr', type=float, default=1e-3, help='lr (if scheduler is constant)')
     parser.add_argument('--weight_decay', type=float, default=0)
     parser.add_argument('--lr_patience', type=int, help='ReduceLROnPlateau arguments')
     parser.add_argument('--lr_reduce_factor', type=float,
@@ -100,7 +100,8 @@ def get_parser():
     parser.add_argument('--model', type=str, default='av_transformer',
                         choices=['transformer', 'av_transformer'], help='caption model type')
     parser.add_argument('--dout_p', type=float, default=0.1, help='dropout probability: in [0, 1]')
-    parser.add_argument('--num_layer', type=int, default=2, help='number of layers in a model')
+    parser.add_argument('--num_encoder_layers', type=int, default=2, help='number of layers in a model')
+    parser.add_argument('--num_decoder_layers', type=int, default=2, help='number of layers in a model')
     parser.add_argument(
         '--d_model', type=int, default=1024,
         help='the internal space in the multi-headed attention (when input dims of Q, K, V differ)')
@@ -142,6 +143,8 @@ def get_parser():
     parser.add_argument('--no_sen_fusion', action='store_true')
     parser.add_argument('--min_iou', type=float, default=0.5)
     parser.add_argument('--max_iou', type=float, default=1.0)
+    parser.add_argument('--gen_weight', type=float, default=1.0)
+    parser.add_argument('--tan_weight', type=float, default=1.0)
     
     parser.set_defaults(to_log=True)
     return parser

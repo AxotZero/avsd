@@ -93,7 +93,14 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
                 
                 # masks = make_masks(feature_stacks, trg, modality, pad_idx)
                 pad_mask, text_mask = make_text_masks(trg, pad_idx)
-                preds, attn, map2d = model(feature_stacks, trg, pad_mask, text_mask, map2d, ret_map2d=True)
+                # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
+
+                preds, attn, map2d = model(
+                    batch['feature_stacks'], trg, 
+                    batch['visual_mask'], batch['audio_mask'], 
+                    padding_mask=pad_mask, text_mask=text_mask,
+                    map2d=map2d, ret_map2d=True
+                )
                 preds[:, :, 0] = float('-inf')  # suppress UNK
                 next_word = torch.where(completeness_mask==0,
                                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
@@ -226,6 +233,8 @@ def batch_to_device(batch, device):
     batch['feature_stacks']['rgb'] = batch['feature_stacks']['rgb'].to(device)
     batch['feature_stacks']['flow'] = batch['feature_stacks']['flow'].to(device)
     batch['feature_stacks']['audio'] = batch['feature_stacks']['audio'].to(device)
+    batch['visual_mask'] = batch['visual_mask'].to(device)
+    batch['audio_mask'] = batch['audio_mask'].to(device)
     batch['caption'] = batch['caption'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
     batch['train_mask'] = batch['train_mask'].to(device)
@@ -238,9 +247,10 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
     total_gen_loss = 0
     total_tan_loss = 0
     loader.dataset.update_iterator()
-    progress_bar_name = f'{cfg.exp_name}: train {epoch} @ {cfg.device}'
+    # progress_bar_name = f'{cfg.exp_name}: train {epoch} @ {cfg.device}'
 
-    for i, batch in enumerate(tqdm(loader, desc=progress_bar_name)):
+    pbar = tqdm(loader, ncols=100)
+    for i, batch in enumerate(pbar):
         batch = batch_to_device(batch, torch.device(cfg.device))
 
         optimizer.zero_grad()
@@ -253,13 +263,18 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
                                                 loader.dataset.pad_idx)
         # masks = make_masks(batch['feature_stacks'], caption_idx_x, cfg.modality, loader.dataset.pad_idx)
         pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
-        pred, attn = model(batch['feature_stacks'], caption_idx_x, padding_mask=pad_mask, text_mask=text_mask)
+        pred, attn = model(
+            batch['feature_stacks'], caption_idx_x, 
+            batch['visual_mask'], batch['audio_mask'], 
+            padding_mask=pad_mask, text_mask=text_mask
+        )
         n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
         gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
         tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
+        # tan_loss = torch.tensor(0)
 
-        loss = gen_loss + tan_loss
+        loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
         loss.backward()
 
         if cfg.grad_clip is not None:
@@ -271,6 +286,9 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         total_loss += loss.item()
         total_gen_loss += gen_loss.item()
         total_tan_loss += tan_loss.item()
+
+        pbar.set_description(f'train {epoch}, gen:{gen_loss.item():.3f}, tan:{tan_loss.item():.3f}')
+        pbar.update()
 
     total_loss /= len(loader)
     total_gen_loss /= len(loader)
@@ -295,9 +313,10 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
 
     loader.dataset.update_iterator()
     phase = loader.dataset.phase
-    progress_bar_name = f'{cfg.exp_name}: {phase:<5} {epoch} @ {cfg.device}'
+    # progress_bar_name = f'{cfg.exp_name}: {phase:<5} {epoch} @ {cfg.device}'
 
-    for i, batch in enumerate(tqdm(loader, desc=progress_bar_name)):
+    pbar = tqdm(loader, ncols=100)
+    for i, batch in enumerate(pbar):
         batch = batch_to_device(batch, torch.device(cfg.device))
 
         caption_idx = batch['caption']
@@ -311,17 +330,25 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
         pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
 
         with torch.no_grad():
-            pred, attn = model(batch['feature_stacks'], caption_idx_x, padding_mask=pad_mask, text_mask=text_mask)
+            pred, attn = model(
+                batch['feature_stacks'], caption_idx_x, 
+                batch['visual_mask'], batch['audio_mask'], 
+                padding_mask=pad_mask, text_mask=text_mask
+            )
             n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
             gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
             tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
+            # tan_loss = torch.tensor(0)
 
-            loss = gen_loss + tan_loss
+            loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
 
             total_loss += loss.item()
             total_gen_loss += gen_loss.item()
             total_tan_loss += tan_loss.item()
+
+            pbar.set_description(f'{phase:<5} {epoch}, gen:{gen_loss.item():.3f}, tan:{tan_loss.item():.3f}')
+            pbar.update()
             
     total_loss /= len(loader)
     total_gen_loss /= len(loader)
@@ -426,14 +453,6 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
                                                list_of_lists_with_filtered_sentences):
             # 
             segment = []
-            if cfg.last_only:
-                for i in range(len(batch['starts'])-1):
-                    segment.append({
-                        'question': '',
-                        'answer': '',
-                        'reason': [{'timestamp': [-1, -1], 'sentence': ''}]
-                    })
-
             for sent in sents:
                 start_time, end_time = sent[2]
                 dur = end.item() - start.item()

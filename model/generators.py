@@ -25,7 +25,7 @@ class Generator(nn.Module):
 
 class GruGenerator(nn.Module):
 
-    def __init__(self, cfg, voc_size, num_layer=3):
+    def __init__(self, cfg, voc_size):
         super().__init__()
         self.gru = GRU(cfg)
         self.linear = nn.Linear(cfg.d_model, voc_size)
