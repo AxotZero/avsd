@@ -123,3 +123,7 @@ class Config(object):
         self.max_iou = args.max_iou
         self.gen_weight = args.gen_weight
         self.tan_weight = args.tan_weight
+        self.num_gru_layers = args.num_gru_layers
+        self.decoding_method = args.decoding_method
+        self.topp = args.topp
+        self.topk = args.topk

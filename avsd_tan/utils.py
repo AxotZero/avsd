@@ -25,12 +25,12 @@ def get_seg_feats(feats, num_seg=64, mask=None, method='mean'):
             func = foo
         else:
             raise Exception('method should be one of ["mean", "max"]')
-        
         bs, seq_len, hidden_size = feats.shape
         if mask is not None:
             seqs_len = (~mask).sum(dim=-1)
         
         rets = torch.zeros((bs, num_seg, hidden_size)).to(feats.get_device())
+        # rets = torch.zeros((bs, num_seg, hidden_size))
         for b in range(bs):
             feat = feats[b]
             ret = rets[b]
@@ -57,12 +57,12 @@ def get_seg_feats(feats, num_seg=64, mask=None, method='mean'):
 
 
 def compute_iou(interval_1, interval_2):
-        start_i, end_i = interval_1[0], interval_1[1]
-        start, end = interval_2[0], interval_2[1]
-        intersection = max(0, min(end, end_i) - max(start, start_i))
-        union = min(max(end, end_i) - min(start, start_i), end-start + end_i-start_i)
-        iou = float(intersection) / (union + 1e-8)
-        return iou
+    start_i, end_i = interval_1[0], interval_1[1]
+    start, end = interval_2[0], interval_2[1]
+    intersection = max(0, min(end, end_i) - max(start, start_i))
+    union = min(max(end, end_i) - min(start, start_i), end-start + end_i-start_i)
+    iou = float(intersection) / (union + 1e-8)
+    return iou
 
 
 def get_pooling_counts(N=64):

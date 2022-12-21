@@ -9,7 +9,7 @@ class GRU(nn.Module):
         self.gru = nn.GRU(
             input_size = cfg.d_model, 
             hidden_size = cfg.d_model*2, 
-            num_layers = cfg.num_decoder_layers,
+            num_layers = cfg.num_gru_layers,
             batch_first=True,
             dropout = cfg.dout_p
         )

@@ -1,4 +1,5 @@
 import itertools
+from pdb import set_trace as bp
 
 import torch
 import torch.nn as nn
@@ -13,7 +14,8 @@ from .utils import get_seg_feats
 def build_mlp(dims, dout_p):
     return nn.Sequential(
         *list(itertools.chain(*[
-            [nn.Linear(dims[i], dims[i+1]), nn.ReLU(), nn.Dropout(dout_p)] for i in range(len(dims)-1)
+            [nn.Linear(dims[i], dims[i+1]), nn.ReLU(), nn.Dropout(dout_p)] 
+            for i in range(len(dims)-1)
         ]))
     )
 
@@ -43,11 +45,11 @@ class VisualEncoder(nn.Module):
         
     
     def forward(self, rgb, flow, mask=None):
-        rgb = F.normalize(rgb)
+        rgb = F.normalize(rgb, dim=-1)
         rgb = self.pre_dropout(rgb)
         rgb = self.encode_rgb(rgb)
         
-        flow = F.normalize(flow)
+        flow = F.normalize(flow, dim=-1)
         flow = self.pre_dropout(flow)
         flow = self.encode_flow(flow)
 
@@ -80,7 +82,7 @@ class AudioEncoder(nn.Module):
         )
         
     def forward(self, aud, mask=None):
-        aud = F.normalize(aud)
+        aud = F.normalize(aud, dim=-1)
         aud = self.pre_dropout(aud)
         aud = self.encode_aud(aud)
         aud = self.pos_enc(aud)
@@ -163,6 +165,36 @@ class BottleneckTransformer(nn.Module):
         return a, b
 
 
+
+class CrossTransformer(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        d_model = cfg.d_model
+        num_tokens = 4
+        num_layers = cfg.num_encoder_layers
+
+        self.token_type_embedding = nn.Parameter(F.normalize(torch.randn(2, d_model)))
+        
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=4, dim_feedforward=d_model*4,
+                dropout=cfg.dout_p, batch_first=True
+            ),
+            num_layers=cfg.num_encoder_layers,
+        )
+
+    def forward(self, a, b, a_mask=None, b_mask=None):
+        bs, seq_len, d_model = a.size()
+        a = a + self.token_type_embedding[0]
+        b = b + self.token_type_embedding[1]
+
+        ab = torch.cat((a,b), dim=1)
+        mask = torch.cat((a_mask, b_mask), dim=1)
+        ab = self.encoder(ab, src_key_padding_mask=mask)
+        a, b = torch.split(ab, seq_len, dim=1)
+        return a, b
+
+
 class AVEncoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -181,10 +213,10 @@ class AVEncoder(nn.Module):
             pre_dout=0.2
         )
         self.cross_encoder = BottleneckTransformer(cfg)
+        # self.cross_encoder = CrossTransformer(cfg)
 
     
     def forward(self, rgb, flow, aud, vis_mask=None, aud_mask=None):
-
         v = self.visual_encoder(rgb, flow, vis_mask)
         a = self.audio_encoder(aud, aud_mask)
 

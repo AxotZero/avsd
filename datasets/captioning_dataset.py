@@ -1,5 +1,6 @@
 import ast
 import random
+from pdb import set_trace as bp
 
 import pandas as pd
 import torch
@@ -392,7 +393,6 @@ class AudioVideoFeaturesDataset(Dataset):
             'tan_label': torch.tensor(sents_iou_target_stacks), # bs, num_sent, num_valid
             'train_mask': train_masks # bs, num_sent
         }
-
         return batch_dict
         
     def __len__(self):
@@ -433,23 +433,10 @@ class AVSD10Dataset(Dataset):
         self.context_start_idx = self.train_vocab.stoi[cfg.context_start_token]
         self.context_end_idx = self.train_vocab.stoi[cfg.context_end_token]
 
-        if cfg.modality == 'video':
-            self.features_dataset = I3DFeaturesDataset(
-                self.meta_path, torch.device(cfg.device), 
-                self.pad_idx, self.get_full_feat, cfg
-            )
-        elif cfg.modality == 'audio':
-            self.features_dataset = VGGishFeaturesDataset(
-                self.meta_path, torch.device(cfg.device), 
-                self.pad_idx, self.get_full_feat, cfg
-            )
-        elif cfg.modality == 'audio_video':
-            self.features_dataset = AudioVideoFeaturesDataset(
-                feature_pkl, self.meta_path, torch.device(cfg.device), 
-                self.pad_idx, self.get_full_feat, cfg
-            )
-        else:
-            raise Exception(f'it is not implemented for modality: {cfg.modality}')
+        self.features_dataset = AudioVideoFeaturesDataset(
+            feature_pkl, self.meta_path, torch.device(cfg.device), 
+            self.pad_idx, self.get_full_feat, cfg
+        )
             
         # initialize the caption loader iterator
         self.update_iterator() 

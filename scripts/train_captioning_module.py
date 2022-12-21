@@ -2,9 +2,10 @@ import numpy as np
 import sys
 import torch
 from torch.utils.data import DataLoader
+from ranger import Ranger
 
 from datasets.captioning_dataset import AVSD10Dataset
-from epoch_loops.captioning_epoch_loops import (greedy_decoder, teacher_forced_decoder, save_model, training_loop, validation_1by1_loop, validation_next_word_loop)
+from epoch_loops.captioning_epoch_loops import (save_model, training_loop, validation_1by1_loop, validation_next_word_loop)
 from loss.label_smoothing import LabelSmoothing
 from loss.iou_loss import TanLoss, TanIouMeanLoss
 from model.captioning_module import BiModalTransformer, Transformer
@@ -35,7 +36,7 @@ def train_cap(cfg):
                 'optimizer': cfg.optimizer,
             }
         )
-
+    torch.multiprocessing.set_sharing_strategy('file_system')
     # doing our best to make it replicable
     torch.manual_seed(0)
     np.random.seed(0)
@@ -50,7 +51,7 @@ def train_cap(cfg):
     train_dataset = AVSD10Dataset(cfg, 'train', train_pkl, get_full_feat=False)
     val_dataset = AVSD10Dataset(cfg, 'val', train_pkl, get_full_feat=False)
     train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate)
-    val_loader = DataLoader(val_dataset, num_workers=cfg.num_workers, collate_fn=val_dataset.dont_collate)
+    val_loader = DataLoader(val_dataset, num_workers=0, collate_fn=val_dataset.dont_collate)
 
     if cfg.pretrained_cap_model_path is not None:
         cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
@@ -71,12 +72,14 @@ def train_cap(cfg):
     # tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
     tan_criterion = TanIouMeanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
     
-    if cfg.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
-                                     weight_decay=cfg.weight_decay)
-    elif cfg.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(model.parameters(), cfg.lr, cfg.momentum,
-                                    weight_decay=cfg.weight_decay)
+    # if cfg.optimizer == 'adam':
+    #     optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
+    #                                  weight_decay=cfg.weight_decay)
+    # elif cfg.optimizer == 'sgd':
+    #     optimizer = torch.optim.SGD(model.parameters(), cfg.lr, cfg.momentum,
+    #                                 weight_decay=cfg.weight_decay)
+    optimizer = Ranger(model.parameters(), cfg.lr, weight_decay=cfg.weight_decay)
+
     
     if cfg.scheduler == 'reduce_on_plateau':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -112,7 +115,7 @@ def train_cap(cfg):
         training_loop(cfg, model, train_loader, gen_criterion, tan_criterion, optimizer, epoch)
         # validation (next word)
         val_loss = validation_next_word_loop(
-            cfg, model, val_loader, greedy_decoder, gen_criterion, tan_criterion, epoch
+            cfg, model, val_loader, gen_criterion, tan_criterion, epoch
         )
         if scheduler is not None:
             scheduler.step(val_loss)
@@ -135,7 +138,7 @@ def train_cap(cfg):
         # validation (1-by-1 word)
         if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
             val_metrics, duration = validation_1by1_loop(
-                cfg, model, val_loader, teacher_forced_decoder, epoch)
+                cfg, model, val_loader, epoch)
             if cfg.wandb:
                 wandb.log(
                     {

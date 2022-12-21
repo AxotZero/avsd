@@ -5,13 +5,17 @@ from tqdm import tqdm
 import torch
 from time import time
 from avsd_tan.utils import get_valid_position
+import torch.nn.functional as F
 
 from model.masking import mask
 from evaluation.evaluate import AVSD_eval
 from utilities.captioning_utils import HiddenPrints, get_lr
 import wandb
 
-def greedy_decoder(model, feature_stacks, max_len, start_idx, end_idx, pad_idx, modality):
+
+
+
+def teacher_force_decoder(model, feature_stacks, max_len, start_idx, end_idx, pad_idx, modality):
     assert model.training is False, 'call model.eval first'
 
     with torch.no_grad():
@@ -40,7 +44,7 @@ def greedy_decoder(model, feature_stacks, max_len, start_idx, end_idx, pad_idx, 
         return trg
 
 
-def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
+def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
                            context_start_idx=None, context_end_idx=None, last_only=False):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
@@ -107,10 +111,184 @@ def teacher_forced_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, m
                                         end_idx_)
                 out = torch.cat([out, next_word], dim=-1)
                 trg = torch.cat([trg, pad_idx_], dim=-1)
-                # aw = model.module.enc_attw()[batch_indices, current_position].unsqueeze(1)
-                # aw = aw[batch_indices, current_position].unsqueeze(1)
-                # # concat all the words' attention weights
-                # attw = torch.cat([attw, aw], dim=1) if attw is not None else aw
+                current_position += 1
+                trg[batch_indices, current_position] = next_word[:, 0]
+                completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+            targets.append(out)
+            attweights.append(attn[:, -1])
+    return sources, targets, attweights
+
+
+def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
+                      context_start_idx=None, context_end_idx=None, last_only=False, 
+                      topk=0, topp=0.0, repetition_penalty=2.0, filter_value=0):
+    assert model.training is False, 'call model.eval first'
+    feature_stacks = batch['feature_stacks']
+    caption_idx = batch['caption']
+    start_pos, end_pos = get_context_positions(caption_idx, context_start_idx, context_end_idx)
+    sources = []
+    targets = []
+    attweights = []
+    with torch.no_grad():
+
+        if 'audio' in modality:
+            B, _Sa_, _Da_ = feature_stacks['audio'].shape
+            device = feature_stacks['audio'].device
+        elif modality == 'video':
+            B, _Sv_, _Drgb_ = feature_stacks['rgb'].shape
+            device = feature_stacks['rgb'].device
+        else:
+            raise Exception(f'Unknown modality: {modality}')
+        
+        # for each QA turn, only last if last_only
+        
+        s = 0 if not last_only else start_pos.size(-1)-1
+        for t in range(s, start_pos.size(1)):
+            # store source information
+            max_src_context_len = int(torch.max(end_pos[:, t] - start_pos[:, t]))
+            src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
+            for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
+                if e >= 0:
+                    src[b, :e-s] = caption_idx[b, s:e]
+            sources.append(src)
+            # prepare context used for teacher forcing
+            max_context_len = int(torch.max(end_pos[:, t])) + 1
+            trg = torch.full((B, max_context_len), pad_idx, dtype=torch.long, device=device)
+            completeness_mask = torch.zeros(B, 1).byte().to(device)
+            current_position = torch.zeros(B, dtype=torch.long, device=device)
+            for b, e in enumerate(end_pos[:, t]):
+                if e >= 0:
+                    trg[b, :e+1] = caption_idx[b, :e+1]
+                    current_position[b] = e
+                else: # no more sentences
+                    completeness_mask[b] = 1
+            # greedy decoding
+            out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
+            pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
+            end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
+            
+            batch_indices = torch.arange(B, dtype=torch.long, device=device)
+            map2d = None
+            while (out.size(-1) <= max_len) and (not completeness_mask.all()):
+                
+                # masks = make_masks(feature_stacks, trg, modality, pad_idx)
+                pad_mask, text_mask = make_text_masks(trg, pad_idx)
+                # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
+
+                preds, attn, map2d = model(
+                    batch['feature_stacks'], trg, 
+                    batch['visual_mask'], batch['audio_mask'], 
+                    padding_mask=pad_mask, text_mask=text_mask,
+                    map2d=map2d, ret_map2d=True
+                )
+                preds[:, :, [0, context_start_idx, context_start_idx]] = float('-inf')  # suppress UNK
+
+
+                # filter topk
+                preds = preds[batch_indices, current_position]
+                preds = F.softmax(preds, dim=-1)
+
+                for index in range(B):
+                    for token_id in set(out[index].cpu().numpy()):
+                        preds[index][token_id] /= repetition_penalty
+                preds = preds / preds.sum(-1)
+                if topk > 0:
+                    for pred in preds:
+                        indices_to_remove = pred < torch.topk(pred, topk)[0][..., -1, None]
+                        pred[indices_to_remove] = filter_value  # 对于topk之外的其他元素的logits值设为负无穷
+                # filter topp
+                if topp > 0.0:
+                    sorted_logits, sorted_indices = torch.sort(preds, descending=True, dim=-1)  # 对logits进行递减排序
+                    cumulative_probs = torch.cumsum(sorted_logits, dim=-1)
+
+                    # Remove tokens with cumulative probability above the threshold
+                    sorted_indices_to_remove = cumulative_probs > topp
+                    # Shift the indices to the right to keep also the first token above the threshold
+                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                    sorted_indices_to_remove[..., 0] = 0
+                    for index, pred in enumerate(preds):
+                        indices_to_remove = sorted_indices[index][sorted_indices_to_remove[index]]
+                        pred[indices_to_remove] = filter_value
+                
+                # select word
+                next_word = torch.where(completeness_mask==0,
+                                        torch.multinomial(preds, num_samples=1),
+                                        end_idx_)
+                
+                out = torch.cat([out, next_word], dim=-1)
+                trg = torch.cat([trg, pad_idx_], dim=-1)
+                current_position += 1
+                trg[batch_indices, current_position] = next_word[:, 0]
+                completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+            targets.append(out)
+            attweights.append(attn[:, -1])
+    return sources, targets, attweights
+
+
+def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
+                           context_start_idx=None, context_end_idx=None, last_only=False, beam_size=5):
+    assert model.training is False, 'call model.eval first'
+    feature_stacks = batch['feature_stacks']
+    caption_idx = batch['caption']
+    start_pos, end_pos = get_context_positions(caption_idx, context_start_idx, context_end_idx)
+    sources = []
+    targets = []
+    attweights = []
+    with torch.no_grad():
+
+        if 'audio' in modality:
+            B, _Sa_, _Da_ = feature_stacks['audio'].shape
+            device = feature_stacks['audio'].device
+        elif modality == 'video':
+            B, _Sv_, _Drgb_ = feature_stacks['rgb'].shape
+            device = feature_stacks['rgb'].device
+        else:
+            raise Exception(f'Unknown modality: {modality}')
+        
+        # for each QA turn, only last if last_only
+        
+        s = 0 if not last_only else start_pos.size(-1)-1
+        for t in range(s, start_pos.size(1)):
+            # store source information
+            max_src_context_len = int(torch.max(end_pos[:, t] - start_pos[:, t]))
+            src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
+            for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
+                if e >= 0:
+                    src[b, :e-s] = caption_idx[b, s:e]
+            sources.append(src)
+            # prepare context used for teacher forcing
+            max_context_len = int(torch.max(end_pos[:, t])) + 1
+            trg = torch.full((B, max_context_len), pad_idx, dtype=torch.long, device=device)
+            completeness_mask = torch.zeros(B, 1).byte().to(device)
+            current_position = torch.zeros(B, dtype=torch.long, device=device)
+            for b, e in enumerate(end_pos[:, t]):
+                if e >= 0:
+                    trg[b, :e+1] = caption_idx[b, :e+1]
+                    current_position[b] = e
+                else: # no more sentences
+                    completeness_mask[b] = 1
+            # greedy decoding
+            out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
+            pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
+            end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
+            
+            batch_indices = torch.arange(B, dtype=torch.long, device=device)
+            map2d = None
+            while (out.size(-1) <= max_len) and (not completeness_mask.all()):
+                pad_mask, text_mask = make_text_masks(trg, pad_idx)
+
+                preds, attn, map2d = model(
+                    batch['feature_stacks'], trg, 
+                    batch['visual_mask'], batch['audio_mask'], 
+                    padding_mask=pad_mask, text_mask=text_mask,
+                    map2d=map2d, ret_map2d=True
+                )
+                preds[:, :, 0] = float('-inf')  # suppress UNK
+                next_word = torch.where(completeness_mask==0,
+                                        preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
+                                        end_idx_)
+                out = torch.cat([out, next_word], dim=-1)
+                trg = torch.cat([trg, pad_idx_], dim=-1)
                 current_position += 1
                 trg[batch_indices, current_position] = next_word[:, 0]
                 completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
@@ -266,12 +444,16 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         pred, attn = model(
             batch['feature_stacks'], caption_idx_x, 
             batch['visual_mask'], batch['audio_mask'], 
-            padding_mask=pad_mask, text_mask=text_mask
+            padding_mask=pad_mask, text_mask=text_mask,
+            # map2d=1
         )
         n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
         gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-        tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
+        if cfg.tan_weight > 0:
+            tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
+        else:
+            tan_loss = 0
         # tan_loss = torch.tensor(0)
 
         loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
@@ -305,7 +487,7 @@ def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, e
         )
             
 
-def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_criterion, epoch):
+def validation_next_word_loop(cfg, model, loader, gen_criterion, tan_criterion, epoch):
     model.eval()
     total_loss = 0
     total_gen_loss = 0
@@ -333,13 +515,16 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
             pred, attn = model(
                 batch['feature_stacks'], caption_idx_x, 
                 batch['visual_mask'], batch['audio_mask'], 
-                padding_mask=pad_mask, text_mask=text_mask
+                padding_mask=pad_mask, text_mask=text_mask,
+                # map2d=1
             )
             n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
             gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-            tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
-            # tan_loss = torch.tensor(0)
+            if cfg.tan_weight > 0:
+                tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
+            else:
+                tan_loss = 0
 
             loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
 
@@ -363,11 +548,13 @@ def validation_next_word_loop(cfg, model, loader, decoder, gen_criterion, tan_cr
             },
             step=epoch
         )
+    
+    print(f'val epoch {epoch}, gen: {total_gen_loss:.3f}, tan: {total_tan_loss:.3f}')
 
     return total_loss
 
 
-def validation_1by1_loop(cfg, model, loader, decoder, epoch):
+def validation_1by1_loop(cfg, model, loader, epoch):
     start_timer = time()
     
     # init the dict with results and other technical info
@@ -393,11 +580,19 @@ def validation_1by1_loop(cfg, model, loader, decoder, epoch):
 
         batch = batch_to_device(batch, torch.device(cfg.device))
 
+        if cfg.decoding_method == 'greedy':
+            ints_stack_list = greedy_decoder(
+                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
+                context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
+            )
+        elif cfg.decoding_method == 'topk_topp':
+            ints_stack_list = topk_topp_decoder(
+                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
+                context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
+                topk=cfg.topk, topp=cfg.topp
+            )
 
-        ints_stack_list = decoder(
-            model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
-            context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
-        )
+
         input_lengths = torch.sum(mask(batch['feature_stacks']['rgb'][:, :, 0], None, pad_idx), dim=-1).cpu().view(-1)
         list_of_lists_with_filtered_sentences = [[] for _ in range(len(ints_stack_list[0][0]))]
         for ints_stack1, ints_stack2, attw_stack in zip(ints_stack_list[0], ints_stack_list[1], ints_stack_list[2]):

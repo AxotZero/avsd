@@ -36,8 +36,8 @@ class AVSDTan(nn.Module):
 
         self.decoder = Decoder(cfg)
 
-        # self.generator = Generator(cfg.d_model, vocab_size)
-        self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
+        self.generator = Generator(cfg.d_model, vocab_size)
+        # self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
 
 
     def forward(self, 

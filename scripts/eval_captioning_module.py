@@ -1,9 +1,10 @@
+from pdb import set_trace as bp
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
 from datasets.captioning_dataset import AVSD10Dataset
-from epoch_loops.captioning_epoch_loops import (teacher_forced_decoder, validation_1by1_loop)
+from epoch_loops.captioning_epoch_loops import (greedy_decoder, validation_1by1_loop)
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
@@ -36,11 +37,8 @@ def eval_cap(cfg):
 
     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
     model_cfg = cap_model_cpt['config']
-    # if cfg.modality == 'audio_video':
-    #     model = BiModalTransformer(model_cfg, test_dataset)
-    # elif cfg.modality in ['video', 'audio']:
-    #     model = Transformer(model_cfg, test_dataset)
     model = AVSDTan(model_cfg, test_dataset)
+    # bp()
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)
@@ -49,8 +47,9 @@ def eval_cap(cfg):
     model.load_state_dict(cap_model_cpt['model_state_dict'])
 
     # evaluation (1-by-1 word)
+
     metrics, duration = validation_1by1_loop(
-        cfg, model, test_loader, teacher_forced_decoder, 0
+        cfg, model, test_loader, 0
     )
     print ('-' * 25)
     for metric, score in metrics.items():

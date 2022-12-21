@@ -18,6 +18,10 @@ class DecoderCrossAttention(nn.Module):
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
         # self.norm = nn.LayerNorm(cfg.d_model)
+
+        self.text_norm = nn.LayerNorm(cfg.d_model)
+        self.av_norm = nn.LayerNorm(cfg.d_model)
+
         self.dropout = nn.Dropout(cfg.dout_p)
     
     def forward(self, text, av_feat, attn_sent_index):
@@ -34,6 +38,9 @@ class DecoderCrossAttention(nn.Module):
         bs, num_sen, num_valid, d_model = av_feat.size()
         num_word = text.size()[1]
         d_k = d_model // self.num_head
+
+        text = self.text_norm(text)
+        av_feat = self.av_norm(av_feat)
         
         q = self.to_q(text).view(bs, num_word, 1, self.num_head, d_k)
         k = self.to_k(av_feat).view(bs, num_sen, num_valid, self.num_head, d_k)
@@ -53,8 +60,7 @@ class DecoderCrossAttention(nn.Module):
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
-        # out = self.norm(out)
-        out = F.normalize(out, dim=-1)
+        # out = F.normalize(out, dim=-1)
         
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
@@ -70,9 +76,13 @@ class DecoderLayer(nn.Module):
         self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
 
         # cross attn
+        # self.av_weight = nn.Parameter(torch.Tensor([1.]))
+        self.av_weight = 1
         self.cross_attn = DecoderCrossAttention(cfg)
-        self.norm = nn.LayerNorm(cfg.d_model)
         self.dropout = nn.Dropout(cfg.dout_p)
+        self.norm1 = nn.LayerNorm(cfg.d_model)
+        self.norm2 = nn.LayerNorm(cfg.d_model)
+
 
         # ff
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*4, dout_p=cfg.dout_p)
@@ -93,10 +103,9 @@ class DecoderLayer(nn.Module):
         text = self.res1(text, lambda x: self.text_att(x,x,x, text_mask))
 
         # cross_attn + res
-        res = self.norm(text)
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        res = self.dropout(res)
-        text = text + res
+        # text = F.normalize(text, dim=-1) + res * self.av_weight
+        text = self.norm1(text) + self.dropout(self.norm2(res) * self.av_weight)
 
         # ff + res
         text = self.res2(text, self.ff)
