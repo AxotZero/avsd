@@ -3,7 +3,8 @@ import os
 import json
 from tqdm import tqdm
 import torch
-from time import time
+import time
+# from time import time
 from avsd_tan.utils import get_valid_position
 import torch.nn.functional as F
 
@@ -45,11 +46,11 @@ def teacher_force_decoder(model, feature_stacks, max_len, start_idx, end_idx, pa
 
 
 def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                           context_start_idx=None, context_end_idx=None, last_only=False):
+                           sent_start_idx=None, sent_end_idx=None, last_only=False):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
-    caption_idx = batch['caption']
-    start_pos, end_pos = get_context_positions(caption_idx, context_start_idx, context_end_idx)
+    dialog_idx = batch['dialog']
+    start_pos, end_pos = get_context_positions(dialog_idx, sent_start_idx, sent_end_idx)
     sources = []
     targets = []
     attweights = []
@@ -73,7 +74,7 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
             src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
             for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
                 if e >= 0:
-                    src[b, :e-s] = caption_idx[b, s:e]
+                    src[b, :e-s] = dialog_idx[b, s:e]
             sources.append(src)
             # prepare context used for teacher forcing
             max_context_len = int(torch.max(end_pos[:, t])) + 1
@@ -82,7 +83,7 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
             current_position = torch.zeros(B, dtype=torch.long, device=device)
             for b, e in enumerate(end_pos[:, t]):
                 if e >= 0:
-                    trg[b, :e+1] = caption_idx[b, :e+1]
+                    trg[b, :e+1] = dialog_idx[b, :e+1]
                     current_position[b] = e
                 else: # no more sentences
                     completeness_mask[b] = 1
@@ -96,14 +97,12 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
                 
                 # masks = make_masks(feature_stacks, trg, modality, pad_idx)
-                pad_mask, text_mask = make_text_masks(trg, pad_idx)
+                # pad_mask, text_mask = make_text_masks(trg, pad_idx)
                 # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
-
+                # bp()
                 preds, attn, map2d = model(
-                    batch['feature_stacks'], trg, 
-                    batch['visual_mask'], batch['audio_mask'], 
-                    padding_mask=pad_mask, text_mask=text_mask,
-                    map2d=map2d, ret_map2d=True
+                    batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
+                    dialog_x=trg, map2d=map2d, ret_map2d=True, compute_loss=False
                 )
                 preds[:, :, 0] = float('-inf')  # suppress UNK
                 next_word = torch.where(completeness_mask==0,
@@ -120,12 +119,12 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
 
 
 def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                      context_start_idx=None, context_end_idx=None, last_only=False, 
+                      sent_start_idx=None, sent_end_idx=None, last_only=False, 
                       topk=0, topp=0.0, repetition_penalty=2.0, filter_value=0):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
     caption_idx = batch['caption']
-    start_pos, end_pos = get_context_positions(caption_idx, context_start_idx, context_end_idx)
+    start_pos, end_pos = get_context_positions(caption_idx, sent_start_idx, sent_end_idx)
     sources = []
     targets = []
     attweights = []
@@ -181,7 +180,7 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
                     padding_mask=pad_mask, text_mask=text_mask,
                     map2d=map2d, ret_map2d=True
                 )
-                preds[:, :, [0, context_start_idx, context_start_idx]] = float('-inf')  # suppress UNK
+                preds[:, :, [0, sent_start_idx, sent_start_idx]] = float('-inf')  # suppress UNK
 
 
                 # filter topk
@@ -226,11 +225,11 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
 
 
 def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                           context_start_idx=None, context_end_idx=None, last_only=False, beam_size=5):
+                           sent_start_idx=None, sent_end_idx=None, last_only=False, beam_size=5):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
     caption_idx = batch['caption']
-    start_pos, end_pos = get_context_positions(caption_idx, context_start_idx, context_end_idx)
+    start_pos, end_pos = get_context_positions(caption_idx, sent_start_idx, sent_end_idx)
     sources = []
     targets = []
     attweights = []
@@ -298,7 +297,7 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
 
 
 def save_model(cfg, epoch, model, optimizer, val_loss_value,
-               val_metrics, trg_voc_size):
+               val_metrics, vocab_size):
     
     dict_to_save = {
         'config': cfg,
@@ -307,7 +306,7 @@ def save_model(cfg, epoch, model, optimizer, val_loss_value,
         'optimizer_state_dict': optimizer.state_dict(),
         'val_loss': val_loss_value,
         'val_metrics': val_metrics,
-        'trg_voc_size': trg_voc_size,
+        'vocab_size': vocab_size,
     }
     
     # in case TBoard is not defined make logdir (can be deleted if Config is used)
@@ -349,24 +348,14 @@ def make_masks(feature_stacks, captions, modality, pad_idx):
     return masks
 
 
-def make_text_masks(x, pad_idx):
-    padding_mask = (x != pad_idx)
-
-    num_word = x.size(-1)
-    mask = torch.ones(1, num_word, num_word)
-    mask = torch.tril(mask, 0).bool().to(x.get_device())
-    text_mask = padding_mask.unsqueeze(-2) & mask
-    return padding_mask, text_mask
-
-
-def get_context_positions(caption_idx, context_start_idx, context_end_idx):
-    """ obtain context end positions based on context_start_idx and context_end_idx
+def get_context_positions(caption_idx, sent_start_idx, sent_end_idx):
+    """ obtain context end positions based on sent_start_idx and sent_end_idx
     """
     B, L = caption_idx.size()
     cap = caption_idx.view(-1)
     positions = torch.arange(len(cap), device=cap.device)
-    start_positions = positions[cap == context_start_idx]
-    end_positions = positions[cap == context_end_idx]
+    start_positions = positions[cap == sent_start_idx]
+    end_positions = positions[cap == sent_end_idx]
     assert len(start_positions) == len(end_positions)
     start_pos_list = [[] for _ in range(B)]
     end_pos_list = [[] for _ in range(B)]
@@ -382,7 +371,7 @@ def get_context_positions(caption_idx, context_start_idx, context_end_idx):
     return start_pos, end_pos
 
 
-def get_context_masked_target(caption_idx, context_start_idx, context_end_idx, end_idx, pad_idx):
+def get_context_masked_target(caption_idx, sent_start_idx, sent_end_idx, end_idx, pad_idx):
     """ replace token_ids between context_start_idx and context_end_idx with pad_idx, and
         also replace context_start_idx with end_idx unless it is in the beginning,
         e.g. in QA dialog '<s> Q: w1 w2 w3 A: w4 w5 Q: w6 w7 A: w8 w9 </s>' is converted to
@@ -390,12 +379,12 @@ def get_context_masked_target(caption_idx, context_start_idx, context_end_idx, e
         where 'Q:', 'A:', and '-' represent context_start, context_end, and pad tokens.
     """
     caption_idx_y = caption_idx[:, 1:]
-    if context_start_idx is not None and context_end_idx is not None:
+    if sent_start_idx is not None and sent_end_idx is not None:
         L = caption_idx_y.size(1)
         cap = torch.clone(caption_idx_y).view(-1)
         positions = torch.arange(len(cap), device=cap.device)
-        context_start_positions = positions[cap == context_start_idx]
-        context_end_positions = positions[cap == context_end_idx]
+        context_start_positions = positions[cap == sent_start_idx]
+        context_end_positions = positions[cap == sent_end_idx]
         assert len(context_start_positions) == len(context_end_positions)
         for i in range(len(context_start_positions)):
             cap[context_start_positions[i]] = pad_idx if context_start_positions[i] % L == 0 else end_idx
@@ -403,6 +392,10 @@ def get_context_masked_target(caption_idx, context_start_idx, context_end_idx, e
         return cap.view(caption_idx_y.size())
     else:
         return caption_idx_y
+
+
+# def text2xy(batch_text_indices, sent_start_idx, sent_end_idx, end_idx, pad_idx):
+#     return batch_text_indices[:, :-1], get_context_masked_target(batch_text_indices, sent_start_idx, sent_end_idx, end_idx, pad_idx)
 
 
 def batch_to_device(batch, device):
@@ -414,83 +407,110 @@ def batch_to_device(batch, device):
     batch['visual_mask'] = batch['visual_mask'].to(device)
     batch['audio_mask'] = batch['audio_mask'].to(device)
     batch['caption'] = batch['caption'].to(device)
+    batch['summary'] = batch['summary'].to(device)
+    batch['dialog'] = batch['dialog'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
-    batch['train_mask'] = batch['train_mask'].to(device)
+    batch['tan_mask'] = batch['tan_mask'].to(device)
     return batch
 
 
-def training_loop(cfg, model, loader, gen_criterion, tan_criterion, optimizer, epoch):
+def training_loop(cfg, model, loader, optimizer, epoch):
     model.train()
     total_loss = 0
-    total_gen_loss = 0
+    total_sim_loss = 0
+    total_dialog_loss = 0
+    total_caption_loss = 0
     total_tan_loss = 0
-    loader.dataset.update_iterator()
-    # progress_bar_name = f'{cfg.exp_name}: train {epoch} @ {cfg.device}'
 
+    loader.dataset.update_iterator()
     pbar = tqdm(loader, ncols=100)
     for i, batch in enumerate(pbar):
         batch = batch_to_device(batch, torch.device(cfg.device))
 
         optimizer.zero_grad()
-        caption_idx = batch['caption']
-        caption_idx_x = caption_idx[:, :-1]
-        caption_idx_y = get_context_masked_target(caption_idx,
-                                                loader.dataset.context_start_idx,
-                                                loader.dataset.context_end_idx,
-                                                loader.dataset.end_idx,
-                                                loader.dataset.pad_idx)
-        # masks = make_masks(batch['feature_stacks'], caption_idx_x, cfg.modality, loader.dataset.pad_idx)
-        pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
-        pred, attn = model(
-            batch['feature_stacks'], caption_idx_x, 
-            batch['visual_mask'], batch['audio_mask'], 
-            padding_mask=pad_mask, text_mask=text_mask,
-            # map2d=1
+        dialog_x = batch['dialog'][:, :-1]
+        dialog_y = get_context_masked_target(
+            batch['dialog'],
+            loader.dataset.sent_start_idx,
+            loader.dataset.sent_end_idx,
+            loader.dataset.end_idx,
+            loader.dataset.pad_idx
         )
-        n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
-        gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-        if cfg.tan_weight > 0:
-            tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
-        else:
-            tan_loss = 0
-        # tan_loss = torch.tensor(0)
+        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
 
-        loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
+        sim_loss, tan_loss, dialog_loss, caption_loss = model(
+            batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
+            dialog_x, dialog_y,
+            summary_x, summary_y,
+            batch['tan_label'], batch['tan_mask'],
+            compute_loss=True
+        )
+
+        # multi device
+        sim_loss = sim_loss.mean()
+        tan_loss = tan_loss.mean()
+        dialog_loss = dialog_loss.mean()
+        caption_loss = caption_loss.mean()
+
+        loss = (
+            cfg.sim_weight * sim_loss + 
+            cfg.tan_weight * tan_loss +
+            cfg.dialog_weight * dialog_loss +
+            cfg.caption_weight * caption_loss
+        )
         loss.backward()
 
         if cfg.grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
 
         optimizer.step()
-        # torch.cuda.empty_cache()
 
         total_loss += loss.item()
-        total_gen_loss += gen_loss.item()
+        total_sim_loss += sim_loss.item()
+        total_dialog_loss += dialog_loss.item()
+        total_caption_loss += caption_loss.item()
         total_tan_loss += tan_loss.item()
 
-        pbar.set_description(f'train {epoch}, gen:{gen_loss.item():.3f}, tan:{tan_loss.item():.3f}')
+        pbar.set_description(
+            '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+                'train', epoch, 
+                sim_loss.item(), tan_loss.item(), caption_loss.item(), dialog_loss.item()
+            )
+        )
         pbar.update()
 
     total_loss /= len(loader)
-    total_gen_loss /= len(loader)
+    total_sim_loss /= len(loader)
+    total_dialog_loss /= len(loader)
+    total_caption_loss /= len(loader)
     total_tan_loss /= len(loader)
-    
+
     if cfg.wandb:
         wandb.log(
             {
                 'train/loss': total_loss,
-                'train/gen_loss': total_gen_loss,
-                'train/tan_loss': total_tan_loss
+                'train/sim_loss': total_sim_loss,
+                'train/tan_loss': total_tan_loss,
+                'train/dialog_loss': total_dialog_loss,
+                'train/caption_loss': total_caption_loss,
             },
             step=epoch
         )
+
+    time.sleep(1)
+    print('train {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+        epoch, total_sim_loss, total_tan_loss, 
+        total_caption_loss, total_dialog_loss
+    ))
             
 
-def validation_next_word_loop(cfg, model, loader, gen_criterion, tan_criterion, epoch):
+def validation_next_word_loop(cfg, model, loader, epoch):
     model.eval()
     total_loss = 0
-    total_gen_loss = 0
+    total_sim_loss = 0
+    total_dialog_loss = 0
+    total_caption_loss = 0
     total_tan_loss = 0
 
     loader.dataset.update_iterator()
@@ -501,61 +521,82 @@ def validation_next_word_loop(cfg, model, loader, gen_criterion, tan_criterion, 
     for i, batch in enumerate(pbar):
         batch = batch_to_device(batch, torch.device(cfg.device))
 
-        caption_idx = batch['caption']
-        caption_idx_x = caption_idx[:, :-1]
-        caption_idx_y = get_context_masked_target(caption_idx,
-                                                loader.dataset.context_start_idx,
-                                                loader.dataset.context_end_idx,
-                                                loader.dataset.end_idx,
-                                                loader.dataset.pad_idx)
+        dialog_x = batch['dialog'][:, :-1]
+        dialog_y = get_context_masked_target(
+            batch['dialog'],
+            loader.dataset.sent_start_idx,
+            loader.dataset.sent_end_idx,
+            loader.dataset.end_idx,
+            loader.dataset.pad_idx
+        )
 
-        pad_mask, text_mask = make_text_masks(caption_idx_x, loader.dataset.pad_idx)
+        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
 
         with torch.no_grad():
-            pred, attn = model(
-                batch['feature_stacks'], caption_idx_x, 
-                batch['visual_mask'], batch['audio_mask'], 
-                padding_mask=pad_mask, text_mask=text_mask,
-                # map2d=1
+            sim_loss, tan_loss, dialog_loss, caption_loss = model(
+                batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
+                dialog_x, dialog_y,
+                summary_x, summary_y,
+                batch['tan_label'], batch['tan_mask'],
+                compute_loss=True
             )
-            n_tokens = (caption_idx_y != loader.dataset.pad_idx).sum()
 
-            gen_loss = gen_criterion(pred, caption_idx_y) / n_tokens
-            if cfg.tan_weight > 0:
-                tan_loss = tan_criterion(attn, batch['tan_label'], batch['train_mask'])
-            else:
-                tan_loss = 0
+            # multi device
+            sim_loss = sim_loss.mean()
+            tan_loss = tan_loss.mean()
+            dialog_loss = dialog_loss.mean()
+            caption_loss = caption_loss.mean()
 
-            loss = cfg.gen_weight * gen_loss + cfg.tan_weight * tan_loss
+            loss = (
+                cfg.sim_weight * sim_loss + 
+                cfg.tan_weight * tan_loss +
+                cfg.dialog_weight * dialog_loss +
+                cfg.caption_weight * caption_loss
+            )
 
             total_loss += loss.item()
-            total_gen_loss += gen_loss.item()
+            total_sim_loss += sim_loss.item()
+            total_dialog_loss += dialog_loss.item()
+            total_caption_loss += caption_loss.item()
             total_tan_loss += tan_loss.item()
 
-            pbar.set_description(f'{phase:<5} {epoch}, gen:{gen_loss.item():.3f}, tan:{tan_loss.item():.3f}')
+            pbar.set_description(
+                '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+                    phase, epoch, 
+                    sim_loss.item(), tan_loss.item(), caption_loss.item(), dialog_loss.item()
+                )
+            )
             pbar.update()
             
     total_loss /= len(loader)
-    total_gen_loss /= len(loader)
+    total_sim_loss /= len(loader)
+    total_dialog_loss /= len(loader)
+    total_caption_loss /= len(loader)
     total_tan_loss /= len(loader)
-    
+
     if cfg.wandb:
         wandb.log(
             {
                 'valid/loss': total_loss,
-                'valid/gen_loss': total_gen_loss,
-                'valid/tan_loss': total_tan_loss
+                'valid/sim_loss': total_sim_loss,
+                'valid/tan_loss': total_tan_loss,
+                'valid/dialog_loss': total_dialog_loss,
+                'valid/caption_loss': total_caption_loss,
             },
             step=epoch
         )
-    
-    print(f'val epoch {epoch}, gen: {total_gen_loss:.3f}, tan: {total_tan_loss:.3f}')
+
+    time.sleep(1)
+    print('{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+        phase, epoch, total_sim_loss, total_tan_loss, 
+        total_caption_loss, total_dialog_loss
+    ))
 
     return total_loss
 
 
 def validation_1by1_loop(cfg, model, loader, epoch):
-    start_timer = time()
+    start_timer = time.time()
     
     # init the dict with results and other technical info
     predictions = {
@@ -567,8 +608,8 @@ def validation_1by1_loop(cfg, model, loader, epoch):
     start_idx = loader.dataset.start_idx
     end_idx = loader.dataset.end_idx
     pad_idx = loader.dataset.pad_idx
-    context_start_idx = loader.dataset.context_start_idx
-    context_end_idx = loader.dataset.context_end_idx
+    sent_start_idx = loader.dataset.sent_start_idx
+    sent_end_idx = loader.dataset.sent_end_idx
     phase = loader.dataset.phase
     # feature_names = loader.dataset.feature_names
     
@@ -583,12 +624,12 @@ def validation_1by1_loop(cfg, model, loader, epoch):
         if cfg.decoding_method == 'greedy':
             ints_stack_list = greedy_decoder(
                 model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
-                context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
+                sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
             )
         elif cfg.decoding_method == 'topk_topp':
             ints_stack_list = topk_topp_decoder(
                 model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
-                context_start_idx=context_start_idx, context_end_idx=context_end_idx, last_only=cfg.last_only,
+                sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
                 topk=cfg.topk, topp=cfg.topp
             )
 
@@ -683,7 +724,7 @@ def validation_1by1_loop(cfg, model, loader, epoch):
 
         with open(submission_path, 'w') as outf:
             json.dump(predictions, outf, indent=2)
-        duration = time() - start_timer
+        duration = time.time() - start_timer
         # blocks the printing
         with HiddenPrints():
             val_metrics = AVSD_eval(ground_truth_filenames=reference_paths,
@@ -693,3 +734,15 @@ def validation_1by1_loop(cfg, model, loader, epoch):
                                     verbose=False).evaluate()
 
         return val_metrics, duration
+
+
+
+# Q: is that a man in the video ? A: yes , it is a man 
+# Q: is he the only person in the video ? A: yes , from beginning to end he is the only one . 
+# Q: where is he ? A: he is in what looks like a bedroom 
+# Q: what is he doing ? A: he is wiping his head with a towel 
+# Q: what does he do after that ? A: he removes his jacket and puts it down 
+# Q: does he sit the entire time ? A: no , when he walks into the room , he takes the towel from his closet , then removes his jacket , sits on the bed . soon he gets up , puts the towel away and puts his jacket on . 
+# Q: does he move fast or slow ? A: he is quite slow , never seems to be in a hurry 
+# Q: does he smile or laugh ? A: no , he does not show any emotions throughout the video 
+# Q: can you hear any noise ? A: no , there is no noise from people or from television

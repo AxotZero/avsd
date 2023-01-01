@@ -46,8 +46,8 @@ def get_parser():
     parser.add_argument('--start_token', type=str, default='<s>', help='starting token')
     parser.add_argument('--end_token', type=str, default='</s>', help='ending token')
     parser.add_argument('--pad_token', type=str, default='<blank>', help='padding token')
-    parser.add_argument('--context_start_token', type=str, default='Q:', help='context start token')
-    parser.add_argument('--context_end_token', type=str, default='A:', help='context end token')
+    parser.add_argument('--sent_start_token', type=str, default='Q:', help='context start token')
+    parser.add_argument('--sent_end_token', type=str, default='A:', help='context end token')
     parser.add_argument('--max_len', type=int, default=20, help='maximum size of 1by1 prediction')
     parser.add_argument('--min_freq_caps', type=int, default=2,
                         help='a word should appear min_freq times in train dataset to be in the vocab')
@@ -143,14 +143,16 @@ def get_parser():
     parser.add_argument('--no_sen_fusion', action='store_true')
     parser.add_argument('--min_iou', type=float, default=0.5)
     parser.add_argument('--max_iou', type=float, default=1.0)
-    parser.add_argument('--gen_weight', type=float, default=1.0)
-    parser.add_argument('--tan_weight', type=float, default=1.0)
     parser.add_argument('--num_gru_layers', type=int, default=1)
     parser.add_argument('--decoding_method', type=str, default='greedy')
     parser.add_argument('--topp', type=float, default=0.92)
     parser.add_argument('--topk', type=int, default=8)
 
-    
+    parser.add_argument('--sim_weight', type=float, default=1.0)
+    parser.add_argument('--tan_weight', type=float, default=1.0)
+    parser.add_argument('--dialog_weight', type=float, default=1.0)
+    parser.add_argument('--caption_weight', type=float, default=1.0)
+
     
     parser.set_defaults(to_log=True)
     return parser

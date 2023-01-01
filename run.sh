@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=layer_norm_d128
+exp_name=no_summary_diff_arch
 
 ## procedure
 procedure='train_test'
@@ -16,31 +16,33 @@ seg_method='sample'
 num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
-num_encoder_layers=2
-num_decoder_layers=4
+num_encoder_layers=3
+num_decoder_layers=3
 num_gru_layers=2
-d_model=128
-dout_p=0.1
+d_model=192
+dout_p=0.2
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
 min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='4 5'
-batch_size=6 # per device
-num_workers=2
+device_ids='5'
+batch_size=4 # per device
+num_workers=4
 weight_decay=0.0002
 lr=0.0005
-gen_weight=1.0
+sim_weight=0
 tan_weight=1.0
+dialog_weight=1.0
+caption_weight=0.0
 epoch_num=200
 one_by_one_starts_at=195
 
 ## decoding_method
 decoding_method='greedy'
 # decoding_method='topk_topp'
-topk=1
+topk=4
 topp=0.92
 
 ## log and debug
@@ -104,11 +106,13 @@ python main.py \
  --min_iou $min_iou \
  --max_iou $max_iou \
  --lr $lr \
- --gen_weight $gen_weight \
- --tan_weight $tan_weight \
  --decoding_method $decoding_method \
  --topp $topp \
  --topk $topk \
+ --sim_weight $sim_weight \
+ --tan_weight $tan_weight \
+ --dialog_weight $dialog_weight \
+ --caption_weight $caption_weight \
  $debug \
  $dont_log \
  $last_only \

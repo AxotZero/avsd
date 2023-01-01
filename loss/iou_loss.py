@@ -12,16 +12,16 @@ class TanIouMeanLoss(object):
     def scale(self, iou):
         return (iou - self.min_iou) / (self.max_iou - self.min_iou)
 
-    def __call__(self, scores, ious, train_mask):
+    def __call__(self, scores, ious, tan_mask):
         """
         scores: bs, num_sent, num_valid
         ious: bs, num_sent, num_valid
         """
         bs, num_sent, num_valid = scores.size()
         
-        train_mask = train_mask.view(bs*num_sent)
-        scores = scores.view(bs*num_sent, num_valid)[train_mask]
-        ious = ious.view(bs*num_sent, num_valid)[train_mask]
+        tan_mask = tan_mask.view(bs*num_sent)
+        scores = scores.view(bs*num_sent, num_valid)[tan_mask]
+        ious = ious.view(bs*num_sent, num_valid)[tan_mask]
 
         ious = self.scale(ious).clamp(0, 1)
 
@@ -43,17 +43,17 @@ class TanLoss(object):
     def scale(self, iou):
         return (iou - self.min_iou) / (self.max_iou - self.min_iou)
 
-    def __call__(self, scores, ious, train_mask):
+    def __call__(self, scores, ious, tan_mask):
         """
         scores: bs, num_sent, num_valid
         ious: bs, num_sent, num_valid
         """
         bs, num_sent, num_valid = scores.size()
         
-        train_mask = train_mask.view(bs*num_sent)
-        scores = scores.view(bs*num_sent, num_valid)[train_mask]
-        ious = ious.view(bs*num_sent, num_valid)[train_mask]
+        tan_mask = tan_mask.view(bs*num_sent)
+        scores = scores.view(bs*num_sent, num_valid)[tan_mask]
+        ious = ious.view(bs*num_sent, num_valid)[tan_mask]
 
         ious = self.scale(ious).clamp(0, 1)
 
-        return F.binary_cross_entropy(scores, ious)
+        return F.binary_cross_entropy(scores.float(), ious.float())

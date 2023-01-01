@@ -231,13 +231,14 @@ class AVMapping(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         d_model = cfg.d_model
+        self.norm = nn.LayerNorm(d_model*2)
         self.mapping = BridgeConnection(d_model*2, d_model, dout_p=cfg.dout_p)
     
-    def forward(self, A, V, S, **kwargs):
-        num_sen = S.size()[1]
-        AV = torch.cat([A,V], dim=-1) 
+    def forward(self, A, V, **kwargs):
+        AV = torch.cat([A,V], dim=-1)
+        AV = self.norm(AV)
         AV = self.mapping(AV) # bs, num_seg, d_model
-        AV = AV.unsqueeze(1).expand(-1, num_sen, -1, -1)
+        # AV = AV.unsqueeze(1).expand(-1, num_sen, -1, -1)
         return AV
 
 

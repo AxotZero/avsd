@@ -29,8 +29,8 @@ class Config(object):
         self.start_token = args.start_token
         self.end_token = args.end_token
         self.pad_token = args.pad_token
-        self.context_start_token = args.context_start_token
-        self.context_end_token = args.context_end_token
+        self.sent_start_token = args.sent_start_token
+        self.sent_end_token = args.sent_end_token
         self.max_len = args.max_len
         self.min_freq_caps = args.min_freq_caps
         self.pretrained_cap_model_path = args.pretrained_cap_model_path
@@ -121,9 +121,12 @@ class Config(object):
         self.no_sen_fusion = args.no_sen_fusion
         self.min_iou = args.min_iou
         self.max_iou = args.max_iou
-        self.gen_weight = args.gen_weight
-        self.tan_weight = args.tan_weight
         self.num_gru_layers = args.num_gru_layers
         self.decoding_method = args.decoding_method
         self.topp = args.topp
         self.topk = args.topk
+
+        self.sim_weight = args.sim_weight
+        self.tan_weight = args.tan_weight
+        self.dialog_weight = args.dialog_weight
+        self.caption_weight = args.caption_weight

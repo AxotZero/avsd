@@ -3,7 +3,7 @@ from pdb import set_trace as bp
 import torch
 import torch.nn as nn
 from torch.functional import F
-
+from model.blocks import PositionwiseFeedForward
 from .utils import get_valid_position, get_2d_position, get_pooling_counts
 
 
@@ -92,8 +92,10 @@ class TAN(nn.Module):
         if not self.no_sen_fusion:
             self.convs = Convs(cfg, self.mask2d)
             self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
+
+        self.mlp = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
         
-    def forward(self, AV, S):
+    def forward(self, AV):
         """
         input:
             F: bs, num_sent, num_seg, d_model
@@ -102,10 +104,9 @@ class TAN(nn.Module):
             map2d: bs, num_sent, num_valid, d_model
         """
         
-        bs, num_sent, num_seg, d_model = AV.size()
+        bs, num_seg, d_model = AV.size()
         # let batch processing more convinience
-        AV = AV.contiguous().view(-1, num_seg, d_model)
-        S = S.view(-1, d_model)
+        AV = AV.contiguous()
         
         # build map2d
         AV = AV.transpose(-1, -2) # for cnn and pooling
@@ -113,21 +114,15 @@ class TAN(nn.Module):
 
         if self.no_sen_fusion:
             map2d = map2d.permute(0, 2, 3, 1) # bs*num_sent, num_seg, num_seg, d_model
-            # map2d = F.normalize(map2d, dim=-1)
         else:
-            # S = self.encode_S(S)
-            # Fuse sentence and feature by Hamard Product
-            # map2d = map2d * S[:, :, None, None]
             map2d = F.normalize(map2d, dim=1)
+            map2d = self.convs(map2d) # bs, N, N, d_model
             
-            # convs
-            map2d = self.convs(map2d) # bs*sent, N, N, d_model
-            
-        # get num_sent back
-        map2d = map2d.view(bs, num_sent, num_seg, num_seg, d_model)
+        map2d = self.mlp(map2d)
         
         # return valid_position
         va = self.valid_position
-        map2d = map2d[:, :, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_sent, num_valid, d_model
+        video_emb = map2d[:, 0, -1]
+        map2d = map2d[:, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_valid, d_model
         
-        return map2d 
+        return map2d, video_emb

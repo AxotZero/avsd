@@ -67,26 +67,13 @@ def train_cap(cfg):
 
     model = AVSDTan(cfg, train_dataset)
 
-    gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
-    iou_mean = load_pickle(f'data/iou_mean_{cfg.min_iou:.1f}-{cfg.max_iou:.1f}_{cfg.num_seg}.pkl')
-    # tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
-    tan_criterion = TanIouMeanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
+    # gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
+    # iou_mean = load_pickle(f'data/iou_mean_{cfg.min_iou:.1f}-{cfg.max_iou:.1f}_{cfg.num_seg}.pkl')
+    # tan_criterion = TanLoss(cfg.min_iou, cfg.max_iou)
+    # tan_criterion = TanIouMeanLoss(cfg.min_iou, cfg.max_iou, iou_mean, torch.device(cfg.device))
     
-    # if cfg.optimizer == 'adam':
-    #     optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
-    #                                  weight_decay=cfg.weight_decay)
-    # elif cfg.optimizer == 'sgd':
-    #     optimizer = torch.optim.SGD(model.parameters(), cfg.lr, cfg.momentum,
-    #                                 weight_decay=cfg.weight_decay)
     optimizer = Ranger(model.parameters(), cfg.lr, weight_decay=cfg.weight_decay)
-
-    
-    if cfg.scheduler == 'reduce_on_plateau':
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, factor=cfg.lr_reduce_factor, patience=cfg.lr_patience
-        )
-    else:
-        scheduler = None
+    scheduler = None
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)
@@ -112,28 +99,24 @@ def train_cap(cfg):
         #     break
 
         # train
-        training_loop(cfg, model, train_loader, gen_criterion, tan_criterion, optimizer, epoch)
-        # validation (next word)
+        training_loop(cfg, model, train_loader, optimizer, epoch)
         val_loss = validation_next_word_loop(
-            cfg, model, val_loader, gen_criterion, tan_criterion, epoch
+            cfg, model, val_loader, epoch
         )
         if scheduler is not None:
             scheduler.step(val_loss)
-
 
         # save_model
         if val_loss < best_metric:
             best_metric = val_loss
             save_model(cfg, epoch, model, optimizer, val_loss,
-                        None, train_dataset.trg_voc_size)
+                        None, train_dataset.vocab_size)
             # reset the early stopping criterion
             num_epoch_best_metric_unchanged = 0
             best_epoch = epoch
         else:
             num_epoch_best_metric_unchanged += 1
-        print(f'Validation scores at epoch {epoch}',
-                f'(best val_loss: %2.4f)' % (best_metric * 100)
-                if epoch==best_epoch else '')
+        
 
         # validation (1-by-1 word)
         if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
@@ -148,17 +131,6 @@ def train_cap(cfg):
                     step=epoch
                 )
                 
-            # saving the model if it is better than the best so far
-            # if best_metric < val_metrics[cfg.key_metric]:
-            #     best_metric = val_metrics[cfg.key_metric]
-            #     save_model(cfg, epoch, model, optimizer, val_loss,
-            #                    val_metrics, train_dataset.trg_voc_size)
-            #     # reset the early stopping criterion
-            #     num_epoch_best_metric_unchanged = 0
-            #     best_epoch = epoch
-            # else:
-            #     num_epoch_best_metric_unchanged += 1
-            # Output the results
             print('-' * 25)
             for metric, score in val_metrics.items():
                 print('| %s: %2.4f' % (metric, 100 * score))
