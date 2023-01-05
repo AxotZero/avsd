@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=no_summary_diff_arch
+exp_name=change_arch
 
 ## procedure
 procedure='train_test'
@@ -19,7 +19,7 @@ num_cnn_layer=2
 num_encoder_layers=3
 num_decoder_layers=3
 num_gru_layers=2
-d_model=192
+d_model=256
 dout_p=0.2
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
@@ -27,15 +27,15 @@ min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='5'
+device_ids='4 5'
 batch_size=4 # per device
 num_workers=4
 weight_decay=0.0002
-lr=0.0005
-sim_weight=0
-tan_weight=1.0
+lr=0.0003
+sim_weight=0.1
+tan_weight=0.2
 dialog_weight=1.0
-caption_weight=0.0
+caption_weight=0.2
 epoch_num=200
 one_by_one_starts_at=195
 

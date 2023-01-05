@@ -4,7 +4,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.blocks import PositionalEncoder, VocabularyEmbedder, PositionwiseFeedForward
+from model.blocks import (PositionalEncoder, VocabularyEmbedder, 
+                          PositionwiseFeedForward, ResidualConnection)
+from model.multihead_attention import MultiheadedAttention
 
 
 class CrossAttentionLayer(nn.Module):
@@ -22,8 +24,8 @@ class CrossAttentionLayer(nn.Module):
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
         
         # output
-        self.norm = nn.LayerNorm(cfg.d_model)
-        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
+        # self.norm = nn.LayerNorm(cfg.d_model)
+        # self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
 
     
     def forward(self, text, av_feat):
@@ -54,31 +56,63 @@ class CrossAttentionLayer(nn.Module):
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
-        out = self.norm(out)
-        out = self.ff(out)
+        # out = self.norm(out)
+        # out = self.ff(out)
         
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
 
+class UniDecoderLayer(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.attn = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, cfg.d_model)
+        self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
+    
+        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
+        self.res2 = ResidualConnection(cfg.d_model, cfg.dout_p)
+    
+    def forward(self, x, mask):
+        x = self.res1(x, lambda y: self.attn(y,y,y, mask))
+        x = self.res2(x, self.ff)
+        return x
 
-class TextUniDecoder(nn.Module):
+
+class CrossDecoderLayer(UniDecoderLayer):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.cross_attn = CrossAttentionLayer(cfg)
+        self.dropout = nn.Dropout(cfg.dout_p)
+        self.norm1 = nn.LayerNorm(cfg.d_model)
+        self.norm2 = nn.LayerNorm(cfg.d_model)
+    
+    def forward(self, x, y, mask):
+        x = self.res1(x, lambda x: self.attn(x,x,x, mask))
+
+        res, attn = self.cross_attn(x, y)
+        x = self.norm1(x) + self.dropout(self.norm2(res))
+
+        x = self.res2(x, self.ff)
+        return x, attn
+
+
+class UniDecoder(nn.Module):
     def __init__(self, cfg, vocab_size, cls_idx):
         super().__init__()
         self.cls_idx = cls_idx
         self.emb_C = VocabularyEmbedder(vocab_size, cfg.d_model)
+        self.pos_C = PositionalEncoder(cfg.d_model, dout_p=cfg.dout_p)
+        self.pre_dropout = nn.Dropout(0.3)
         self.layers = nn.ModuleList([
-            nn.TransformerEncoderLayer(
-                d_model=cfg.d_model, nhead=4, dim_feedforward=cfg.d_model*2,
-                dropout=cfg.dout_p, norm_first=True, batch_first=True
-            )
+            UniDecoderLayer(cfg)
             for _ in range(cfg.num_encoder_layers)
         ])
 
     def forward(self, text_ids, text_mask, get_caption_emb=False):
         text = self.emb_C(text_ids)
+        text = self.pre_dropout(text)
+        text = self.pos_C(text)
         for layer in self.layers:
-            res = layer(text, text_mask)
-            text = text + res
+            text = layer(text, text_mask)
         
         if get_caption_emb:
             # bp()
@@ -90,28 +124,18 @@ class TextUniDecoder(nn.Module):
         return text
 
 
-class TextCrossDecoder(nn.Module):
+class CrossDecoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.layers = nn.ModuleList()
-        for _ in range(cfg.num_decoder_layers):
-            self.layers.append(nn.ModuleList([
-                nn.TransformerEncoderLayer(
-                    d_model=cfg.d_model, nhead=4, dim_feedforward=cfg.d_model*2,
-                    dropout=cfg.dout_p, norm_first=True, batch_first=True
-                ),
-                CrossAttentionLayer(cfg)
-            ]))
+        self.layers = nn.ModuleList([
+            CrossDecoderLayer(cfg)
+            for _ in range(cfg.num_decoder_layers)
+        ])
 
     def forward(self, text, av_feat, text_mask):
         cross_attn_ws = []
-        for uni_layer, cross_layer in self.layers:
-            # uni_layer
-            res = uni_layer(text, text_mask)
-            text = text + res
-            # cross_layer
-            res, attn_w = cross_layer(text, av_feat)
-            text = text + res
+        for layer in self.layers:
+            text, attn_w = layer(text, av_feat, text_mask)
 
             cross_attn_ws.append(attn_w)
         return text, cross_attn_ws

@@ -316,6 +316,7 @@ class AVSD10Dataset(Dataset):
         self.sent_start_idx = self.train_vocab.stoi[cfg.sent_start_token]
         self.sent_end_idx = self.train_vocab.stoi[cfg.sent_end_token]
         self.cls_idx = self.train_vocab.stoi['CLS']
+        self.cap_idx = self.train_vocab.stoi['C:']
 
         self.features_dataset = AudioVideoFeaturesDataset(
             feature_pkl, self.meta_path, torch.device(cfg.device), 

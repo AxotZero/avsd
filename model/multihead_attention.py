@@ -16,7 +16,9 @@ def attention(Q, K, V, mask, dropout=None, get_attw=False):
     sm_input = QKt / np.sqrt(d_k)
     
     if mask is not None:
-        sm_input = sm_input.masked_fill(mask == 0, -float('inf'))
+        while len(mask.size()) < len(sm_input.size()):
+            mask = mask.unsqueeze(0)
+        sm_input = sm_input.masked_fill(mask, -float('inf'))
 
     softmax = F.softmax(sm_input, dim=-1)
     out = softmax.matmul(V)
@@ -78,9 +80,9 @@ class MultiheadedAttention(nn.Module):
         K = K.view(B, -1, self.H, self.d_k).transpose(-3, -2)
         V = V.view(B, -1, self.H, self.d_k).transpose(-3, -2)
 
-        if mask is not None:
-            # the same mask for all heads -> (B, 1, 1, Sm2)
-            mask = mask.unsqueeze(1)
+        # if mask is not None:
+        #     # the same mask for all heads -> (B, 1, 1, Sm2)
+        #     mask = mask.unsqueeze(1)
 
         # (B, H, Sq, d_k) <- (B, H, Sq, d_k), (B, H, Sk, d_k), (B, H, Sv, d_k), Sk = Sv
         if self.keep_attw:
