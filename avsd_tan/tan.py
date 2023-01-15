@@ -105,10 +105,10 @@ class TAN(nn.Module):
             map2d: bs, num_sent, num_valid, d_model
         """
         
-        bs, num_sent, num_seg, d_model = AV.size()
+        bs, num_seg, d_model = AV.size()
         # let batch processing more convinience
-        AV = AV.contiguous().view(-1, num_seg, d_model)
-        # AV = AV.contiguous()
+        # AV = AV.contiguous().view(-1, num_seg, d_model)
+        AV = AV.contiguous()
         
         # build map2d
         AV = AV.transpose(-1, -2) # for cnn and pooling
@@ -117,11 +117,10 @@ class TAN(nn.Module):
         if self.no_sen_fusion:
             map2d = map2d.permute(0, 2, 3, 1) # bs*num_sent, num_seg, num_seg, d_model
         else:
-            # map2d = F.normalize(map2d, dim=1)
-            # map2d = self.norm(map2d)
-
+            map2d = F.normalize(map2d, dim=1)
             map2d = self.convs(map2d) # bs, N, N, d_model
-            
+        
+        map2d = self.norm(map2d)
         map2d = self.mlp(map2d)
         
         # return valid_position

@@ -30,7 +30,6 @@ class AVSDTan(nn.Module):
         self.pad_idx = train_dataset.pad_idx
         self.sent_start_idx = train_dataset.sent_start_idx
         self.sent_end_idx = train_dataset.sent_end_idx
-        self.cap_idx = train_dataset.cap_idx
 
         # encode text
         self.text_uni_decoder = UniDecoder(cfg, vocab_size, cls_idx)
@@ -38,7 +37,7 @@ class AVSDTan(nn.Module):
 
         # encode av
         self.av_encoder = AVEncoder(cfg)
-        self.av_fusion = AVFusion(cfg)
+        self.av_fusion = AVMapping(cfg)
         self.tan = TAN(cfg)
 
         self.generator = Generator(cfg.d_model, train_dataset.vocab_size)
@@ -49,7 +48,7 @@ class AVSDTan(nn.Module):
 
 
     def get_sent_indices(self, text):
-        sent_indices = ((text == self.sent_start_idx) | (text == self.cap_idx)).long() 
+        sent_indices = (text == self.sent_start_idx).long() 
         for i in range(1, text.size()[1]):
             sent_indices[:, i] += sent_indices[:, i-1]
         sent_indices -= 1
@@ -80,23 +79,23 @@ class AVSDTan(nn.Module):
         sent_attn = torch.stack(sent_attn, dim=1) # bs, num_sent, num_valid
         return sent_attn
 
-    def embed_map2d(self, rgb, flow, audio, vis_mask, aud_mask, sent_feats=None):
+    def embed_map2d(self, rgb, flow, audio, vis_mask, aud_mask):
         V, A = self.av_encoder(
             rgb, flow, audio, 
             vis_mask=vis_mask, aud_mask=aud_mask
         ) # bs, num_seg, d_video for A and V
 
-        AV = self.av_fusion(A, V, sent_feats) # bs, num_sen, num_seg, d_model
+        AV = self.av_fusion(A, V) # bs, num_sen, num_seg, d_model
         AV = self.tan(AV) # bs, num_sent, num_valid, d_model
         return AV
 
     def get_mask(self, text):
         padding_mask = (text != self.pad_idx)
         num_word = text.size(-1)
-        mask = torch.ones(1, num_word, num_word)
-        mask = torch.tril(mask, 0).bool().to(text.get_device())
-        text_mask = padding_mask.unsqueeze(-2) & mask
-        # text_mask = torch.ones(num_word, num_word).triu(1).bool().to(text.get_device())
+        # mask = torch.ones(1, num_word, num_word)
+        # mask = torch.tril(mask, 0).bool().to(text.get_device())
+        # text_mask = padding_mask.unsqueeze(-2) & mask
+        text_mask = torch.ones(num_word, num_word).triu(1).bool().to(text.get_device())
         return padding_mask, text_mask
 
     def forward(self, 
@@ -105,28 +104,23 @@ class AVSDTan(nn.Module):
                 caption_x=None, caption_y=None,                 # caption
                 tan_target=None, tan_mask=None,                 # tan
                 map2d=None, compute_loss=True, ret_map2d=False):# return something
+
+        # get map2d
+        if map2d is None:
+            map2d, video_emb = self.embed_map2d(
+                feats['rgb'], feats['flow'], feats['audio'], 
+                vis_mask=visual_mask, aud_mask=audio_mask
+            )
         
         # gen dialog
         if dialog_x is not None:
-            sent_indices = self.get_sent_indices(dialog_x)
-
             dialog_pad_mask, dialog_text_mask = self.get_mask(dialog_x)
             pred_dialog = self.text_uni_decoder(dialog_x, dialog_text_mask, get_caption_emb=False)
-            sent_mask = (dialog_x == self.sent_end_idx)
-            sent_feats = pred_dialog[sent_mask].view(pred_dialog.size(0) -1, self.d_model)
-
-            if map2d is None:
-                map2d, video_emb = self.embed_map2d(
-                    feats['rgb'], feats['flow'], feats['audio'], 
-                    vis_mask=visual_mask, aud_mask=audio_mask,
-                    sent_feats=sent_feats
-                )
-
             pred_dialog, attn_w = self.text_cross_decoder(pred_dialog, map2d, dialog_text_mask)
             pred_dialog = self.generator(pred_dialog)
             
             # process attn_w
-            
+            sent_indices = self.get_sent_indices(dialog_x)
             attn_w = self.compute_sentence_attn_w(attn_w, dialog_pad_mask, sent_indices)
         
         # gen caption
