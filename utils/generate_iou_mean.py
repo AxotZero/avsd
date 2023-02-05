@@ -35,7 +35,7 @@ data - element:
 data = [] 
 df = pd.read_csv(args.csv_path, sep='\t')
 for i, row in df.iterrows():
-    if not row['train_mask']:
+    if not row['tan_mask']:
         continue
     seq_start = row['seq_start']
     seq_end = row['seq_end']

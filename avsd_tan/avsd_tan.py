@@ -10,78 +10,118 @@ import torch.nn as nn
 from model.generators import Generator, GruGenerator
 from .av_encoder import AVEncoder, AVFusion, AVMapping
 from .tan import TAN
-from .decoder import Decoder 
+from .decoder import UniDecoder, CrossDecoder 
 from .rnn import GRU
-from .text_encoder import TextEncoder
+
+from loss import TanLoss, TanIouMeanLoss, LabelSmoothing, ContrasitiveLoss
 
 
 class AVSDTan(nn.Module):
     def __init__(self, cfg, train_dataset):
         super().__init__()
-        vocab_size = train_dataset.trg_voc_size
+        vocab_size = train_dataset.vocab_size
         self.d_model = cfg.d_model
         self.last_only = cfg.last_only
         # margin of sentence
         self.pad_idx = train_dataset.pad_idx
-        self.context_start_idx = train_dataset.context_start_idx
-        self.context_end_idx = train_dataset.context_end_idx
+        self.cls_idx = train_dataset.cls_idx
+        self.sent_start_idx = train_dataset.sent_start_idx
+        self.sent_end_idx = train_dataset.sent_end_idx
+        self.cap_idx = train_dataset.cap_idx
 
         # encode features
-        self.text_encoder = TextEncoder(cfg, vocab_size)
+        self.uni_decoder = UniDecoder(cfg, vocab_size, self.cls_idx)
 
         # encode word embedding
         self.av_encoder = AVEncoder(cfg)
         self.av_fusion = AVFusion(cfg)
         self.tan = TAN(cfg)
 
-        self.decoder = Decoder(cfg)
+        self.cross_decoder = CrossDecoder(cfg)
 
         self.generator = Generator(cfg.d_model, vocab_size)
-        # self.generator = GruGenerator(cfg, voc_size=train_dataset.trg_voc_size)
+        # self.generator = GruGenerator(cfg, voc_size=train_dataset.vocab_size)
 
+
+        self.sim_loss = ContrasitiveLoss()
+        self.tan_loss = TanLoss(cfg.min_iou, cfg.max_iou)
+        self.gen_loss = LabelSmoothing(cfg.smoothing, self.pad_idx, self.cls_idx)
+
+
+    def get_sent_indices(self, text):
+        # specify the index of map2d the word need to attend
+        sent_indices = ((text == self.sent_start_idx) | (text == self.cap_idx)).long() 
+        sent_indices = torch.cumsum(sent_indices, dim=-1) - 1
+        sent_indices = torch.clamp(sent_indices, min=0)
+        return sent_indices
+
+    def get_mask(self, text):
+        bs, num_word = text.size()
+        padding_mask = (text != self.pad_idx)
+        mask = torch.ones(1, num_word, num_word)
+        mask = torch.tril(mask, 0).bool().to(text.get_device())
+        text_mask = padding_mask.unsqueeze(-2) & mask
+        # text_mask = torch.ones(bs, num_word, num_word).triu(1).bool().to(text.get_device())
+        return padding_mask, text_mask
+
+    def embed_map2d(self, rgb, flow, audio, sent_feats=None, visual_mask=None, audio_mask=None):
+        V, A = self.av_encoder(
+            rgb, flow, audio, 
+            vis_mask=visual_mask, aud_mask=audio_mask
+        ) # bs, num_seg, d_video for A and V
+
+        AV = self.av_fusion(A, V, sent_feats) # bs, num_sen, num_seg, d_model
+        map2d, video_emb = self.tan(AV) # bs, num_sent, num_valid, d_model
+        return map2d, video_emb
 
     def forward(self, 
-                feats, text, visual_mask=None, audio_mask=None,
-                padding_mask=None, text_mask=None, map2d=None, ret_map2d=False):
-        if padding_mask is None:
-            padding_mask = (text != self.pad_idx).bool()
-        if text_mask is None:
-            bs, num_word = text.size()
-            text_mask = text.new_ones((bs, num_word, num_word))
+                feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
+                dialog_x=None, dialog_y=None,                   # dialog
+                caption_x=None, caption_y=None,                 # caption
+                tan_target=None, tan_mask=None,                 # tan
+                map2d=None, compute_loss=True, ret_map2d=False):# return something
 
-        # get sent feat
-        C = self.text_encoder(text) # bs, num_word, d_model
-        if map2d is not None:
-            AV = map2d
-        else:
-            # sentence mask
-            sent_mask = (text == self.context_end_idx)
+        rgb, flow, audio = feats['rgb'], feats['flow'], feats['audio']
+        bs = rgb.size(0)
 
-            # get av feature
-            V, A = self.av_encoder(
-                feats['rgb'], feats['flow'], feats['audio'], 
-                vis_mask=~visual_mask, aud_mask=~audio_mask
-            ) # bs, num_seg, d_video for A and V
-
-            
-            # get sentence embedding, if it is test mode, batch size should be 1
-            S = C[sent_mask.bool()].view(C.size()[0], -1, self.d_model) # bs, num_sent, d_dim
-            
-            # get 2d_tan feature
-            AV = self.av_fusion(A, V, S) # bs, num_sen, num_seg, d_model
-            AV = self.tan(AV, S) # bs, num_sent, num_valid, d_model
+        if caption_x is not None:
+            pad_mask, text_mask = self.get_mask(caption_x)
+            embs, caption_emb = self.uni_decoder(caption_x, text_mask, get_caption_emb=True)
+            cap_map2d, video_emb = self.embed_map2d(rgb, flow, audio, None, visual_mask, audio_mask)            
+            sent_indices = self.get_sent_indices(caption_x)
+            embs, _ = self.cross_decoder(embs, 
+                                         cap_map2d, 
+                                         pad_mask, 
+                                         text_mask,
+                                         sent_indices)
+            gen_caption = self.generator(embs)
         
-        # specify the index of map2d the word need to attend
-        attn_sent_index = (text == self.context_start_idx).long() 
-        for i in range(1, text.size()[1]):
-            attn_sent_index[:, i] += attn_sent_index[:, i-1]
-        attn_sent_index -= 1
-        
-        # decode and return attention weight of each sentence
-        C, attn = self.decoder(C, AV, padding_mask, text_mask, attn_sent_index)
-        C = self.generator(C)
 
+        if dialog_x is not None:
+            pad_mask, text_mask = self.get_mask(dialog_x)
+            embs = self.uni_decoder(dialog_x, text_mask, get_caption_emb=False)
+
+            if map2d is None:
+                sent_mask = dialog_x == self.sent_end_idx
+                sent_feats = embs[sent_mask].view(bs, -1, self.d_model) # bs, num_sent, d_dim
+                map2d, _ = self.embed_map2d(rgb, flow, audio, sent_feats, visual_mask, audio_mask)
+
+            sent_indices = self.get_sent_indices(dialog_x)
+            embs, attn_w = self.cross_decoder(embs, 
+                                              map2d, 
+                                              pad_mask, 
+                                              text_mask,
+                                              sent_indices)
+            gen_dialog = self.generator(embs)
+
+        ### write loss func
+        if compute_loss:
+            sim_loss = self.sim_loss(video_emb, caption_emb)
+            tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
+            dialog_loss = self.gen_loss(gen_dialog, dialog_y)
+            caption_loss = self.gen_loss(gen_caption, caption_y)
+            return sim_loss, tan_loss, dialog_loss, caption_loss
 
         if ret_map2d:
-            return C, attn, AV
-        return C, attn
+            return gen_dialog, attn_w, map2d
+        return gen_dialog, attn_w

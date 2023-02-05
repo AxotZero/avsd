@@ -34,11 +34,11 @@ class Transformer(nn.Module):
             assert self.d_feat == self.d_model
             self.src_emb = Identity()
             
-        self.trg_emb = VocabularyEmbedder(train_dataset.trg_voc_size, self.d_model)
+        self.trg_emb = VocabularyEmbedder(train_dataset.vocab_size, self.d_model)
         self.pos_emb = PositionalEncoder(self.d_model, cfg.dout_p)
         self.encoder = Encoder(self.d_model, cfg.dout_p, cfg.H, self.d_ff, cfg.N)
         self.decoder = Decoder(self.d_model, cfg.dout_p, cfg.H, self.d_ff, cfg.N, keep_enc_attw = True)
-        self.generator = Generator(self.d_model, train_dataset.trg_voc_size)
+        self.generator = Generator(self.d_model, train_dataset.vocab_size)
         self.keep_enc_attw = True
 
         print('initialization: xavier')
@@ -106,7 +106,7 @@ class BiModalTransformer(nn.Module):
             self.emb_A = Identity()
             self.emb_V = Identity()
 
-        self.emb_C = VocabularyEmbedder(train_dataset.trg_voc_size, cfg.d_model_caps)
+        self.emb_C = VocabularyEmbedder(train_dataset.vocab_size, cfg.d_model_caps)
         
         self.pos_enc_A = PositionalEncoder(cfg.d_model_audio, cfg.dout_p)
         self.pos_enc_V = PositionalEncoder(cfg.d_model_video, cfg.dout_p)
@@ -123,7 +123,7 @@ class BiModalTransformer(nn.Module):
         )
         self.keep_enc_attw = True
 
-        self.generator = Generator(cfg.d_model_caps, train_dataset.trg_voc_size)
+        self.generator = Generator(cfg.d_model_caps, train_dataset.vocab_size)
 
         print('initialization: xavier')
         for p in self.parameters():

@@ -6,10 +6,35 @@ import torch.nn.functional as F
 import numpy as np
 
 from model.multihead_attention import MultiheadedAttention
-from model.blocks import ResidualConnection, PositionwiseFeedForward
+from model.blocks import ResidualConnection, PositionwiseFeedForward, PositionalEncoder, VocabularyEmbedder
+from .rnn import GRU
 
 
-class DecoderCrossAttention(nn.Module):
+class UniDecoder(nn.Module):
+    def __init__(self, cfg, vocab_size, cls_idx):
+        super().__init__()
+        self.cls_idx = cls_idx
+        self.pre_dropout = nn.Dropout(0.3)
+        self.emb_C = VocabularyEmbedder(vocab_size, cfg.d_model)
+        self.pos_enc_C = PositionalEncoder(cfg.d_model, cfg.dout_p)
+        self.gru = GRU(cfg)
+    
+    def forward(self, text_indices, text_mask=None, get_caption_emb=False):
+        text = self.emb_C(text_indices)
+        text = self.pre_dropout(text)
+        text = self.pos_enc_C(text)
+        text = self.gru(text)
+
+        if get_caption_emb:
+            cls_mask = text_indices == self.cls_idx
+            bs, seq_len, emb_dim = text.size()
+            caption_emb = text[cls_mask].view(bs, emb_dim)
+            return text, caption_emb
+
+        return text
+
+
+class CrossAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
@@ -65,7 +90,7 @@ class DecoderCrossAttention(nn.Module):
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
 
-class DecoderLayer(nn.Module):
+class CrossDecoderLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
@@ -78,14 +103,14 @@ class DecoderLayer(nn.Module):
         # cross attn
         # self.av_weight = nn.Parameter(torch.Tensor([1.]))
         self.av_weight = 1
-        self.cross_attn = DecoderCrossAttention(cfg)
+        self.cross_attn = CrossAttention(cfg)
         self.dropout = nn.Dropout(cfg.dout_p)
         self.norm1 = nn.LayerNorm(cfg.d_model)
         self.norm2 = nn.LayerNorm(cfg.d_model)
 
 
         # ff
-        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*4, dout_p=cfg.dout_p)
+        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
         self.res2 = ResidualConnection(cfg.d_model, cfg.dout_p)
 
     def forward(self, text, av_feat, text_mask, attn_sent_index):
@@ -113,10 +138,10 @@ class DecoderLayer(nn.Module):
         return text, attn
 
 
-class Decoder(nn.Module):
+class CrossDecoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.layers = nn.ModuleList([DecoderLayer(cfg) for _ in range(cfg.num_decoder_layers)])
+        self.layers = nn.ModuleList([CrossDecoderLayer(cfg) for _ in range(cfg.num_decoder_layers)])
     
     def compute_sentence_attn_w(self, attn, padding_mask, attn_sent_index):
         """
@@ -143,12 +168,12 @@ class Decoder(nn.Module):
         sent_attn = torch.stack(sent_attn, dim=1) # bs, num_sent, num_valid
         return sent_attn
     
-    def forward(self, text, av_feat, padding_mask, text_mask, attn_sent_index):
+    def forward(self, text, av_feat, padding_mask=None, text_mask=None, attn_sent_index=None):
         attns = []
         for decoder in self.layers:
             text, attn = decoder(text, av_feat, text_mask, attn_sent_index)
             attns.append(attn)
-        
+            
         attn = self.compute_sentence_attn_w(attns, padding_mask, attn_sent_index)
         return text, attn
         

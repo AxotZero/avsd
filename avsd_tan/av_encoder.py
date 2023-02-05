@@ -104,8 +104,8 @@ class BottleneckTransformerLayer(nn.Module):
         self.att4 = nn.MultiheadAttention(d_model, num_heads=heads, dropout=dout, batch_first=True)
         self.att2 = nn.MultiheadAttention(d_model, num_heads=heads, dropout=dout, batch_first=True)
 
-        self.ffn1 = PositionwiseFeedForward(d_model, d_model*4, dout_p=dout)
-        self.ffn2 = PositionwiseFeedForward(d_model, d_model*4, dout_p=dout)
+        self.ffn1 = PositionwiseFeedForward(d_model, d_model*2, dout_p=dout)
+        self.ffn2 = PositionwiseFeedForward(d_model, d_model*2, dout_p=dout)
 
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -250,17 +250,13 @@ class AVFusion(nn.Module):
 
         self.d_k = self.d_model // self.num_head
 
-        # self.encode_A = nn.Linear(cfg.d_model, cfg.d_model)
-        # self.encode_V = nn.Linear(cfg.d_model, cfg.d_model)
-        # self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
-
         self.to_q = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
         self.to_k = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
         self.to_v = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
 
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model, dout_p=0.0)
     
-    def forward(self, A, V, S):
+    def forward(self, A, V, S=None):
         """
         input:
             A: bs, num_seg, d_model
@@ -270,27 +266,28 @@ class AVFusion(nn.Module):
             ret: bs, num_sen, num_seg, d_model
         """
         
-        # map to same dim
-        # A = self.encode_A(A)
-        # V = self.encode_V(V)
-        # S = self.encode_S(S)
-        
         bs, num_seg, d_model = A.size()
-        num_sen = S.size()[1]
-        
-        # use each sentence feature as query to fuse each AV segment
+        num_sen = 1
         av = torch.stack([A, V], dim=2) # bs, num_seg, 2, d_model
-        q = self.to_q(S ).view(bs, num_sen, 1, 1, self.num_head, self.d_k)
-        k = self.to_k(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
         v = self.to_v(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
-        
-        # compute attention
-        attn = (q*k).sum(-1, keepdim=True) # bs, num_sen, num_seg, 2, num_head, d_k
-        attn = attn / np.sqrt(self.d_k)
-        attn = F.softmax(attn, dim=-3)
-        
-        # weighted sum by value
-        out = (attn*v).sum(dim=-3) # bs, num_sen, num_seg, num_head, d_k
+
+        if S is None:
+            # no text embedding, simply average the av embedding
+            out = v.mean(dim=-3)
+        else:
+            # av fusion by text embedding
+            num_sen = S.size()[1]
+            # use each sentence feature as query to fuse each AV segment
+            q = self.to_q(S ).view(bs, num_sen, 1, 1, self.num_head, self.d_k)
+            k = self.to_k(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
+            # compute attention
+            attn = (q*k).sum(-1, keepdim=True) # bs, num_sen, num_seg, 2, num_head, d_k
+            attn = attn / np.sqrt(self.d_k)
+            attn = F.softmax(attn, dim=-3)
+            
+            # weighted sum by value
+            out = (attn*v).sum(dim=-3) # bs, num_sen, num_seg, num_head, d_k
+
         out = out.view(bs, num_sen, num_seg, -1) # bs, num_sen, num_seg, d_model
 
         # fully connected

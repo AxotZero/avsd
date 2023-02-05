@@ -6,6 +6,8 @@ from torch.functional import F
 
 from .utils import get_valid_position, get_2d_position, get_pooling_counts
 
+from model.blocks import PositionwiseFeedForward
+
 
 class Feat2D(nn.Module):
     def __init__(self, cfg, poolers_position):
@@ -89,11 +91,13 @@ class TAN(nn.Module):
         
         self.feat2d = Feat2D(cfg, poolers_position)
         
+        self.norm = nn.LayerNorm(cfg.d_model)
+        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
         if not self.no_sen_fusion:
             self.convs = Convs(cfg, self.mask2d)
             self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
         
-    def forward(self, AV, S):
+    def forward(self, AV):
         """
         input:
             F: bs, num_sent, num_seg, d_model
@@ -105,7 +109,6 @@ class TAN(nn.Module):
         bs, num_sent, num_seg, d_model = AV.size()
         # let batch processing more convinience
         AV = AV.contiguous().view(-1, num_seg, d_model)
-        S = S.view(-1, d_model)
         
         # build map2d
         AV = AV.transpose(-1, -2) # for cnn and pooling
@@ -125,9 +128,12 @@ class TAN(nn.Module):
             
         # get num_sent back
         map2d = map2d.view(bs, num_sent, num_seg, num_seg, d_model)
-        
+        map2d = self.norm(map2d)
+        map2d = self.ff(map2d)
+
         # return valid_position
         va = self.valid_position
+        video_emb = map2d[:, 0, 0, -1]
         map2d = map2d[:, :, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_sent, num_valid, d_model
         
-        return map2d 
+        return map2d, video_emb
