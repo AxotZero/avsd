@@ -48,10 +48,10 @@ class MultiheadedAttention(nn.Module):
 
         self.d_k = self.d_model // H
 
-        self.linear_Q2d = nn.Linear(self.d_model_Q, self.d_model)
-        self.linear_K2d = nn.Linear(self.d_model_K, self.d_model)
-        self.linear_V2d = nn.Linear(self.d_model_V, self.d_model)
-        self.linear_d2Q = nn.Linear(self.d_model, self.d_model_Q)
+        self.linear_Q2d = BridgeConnection(self.d_model_Q, self.d_model, dout_p)
+        self.linear_K2d = BridgeConnection(self.d_model_K, self.d_model, dout_p)
+        self.linear_V2d = BridgeConnection(self.d_model_V, self.d_model_V, dout_p)
+        self.linear_d2Q = BridgeConnection(self.d_model_V, self.d_model_Q, dout_p)
 
         self.dropout = nn.Dropout(self.dout_p)
         self.keep_attw = keep_attw

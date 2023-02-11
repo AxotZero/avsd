@@ -96,6 +96,7 @@ class TAN(nn.Module):
         if not self.no_sen_fusion:
             self.convs = Convs(cfg, self.mask2d)
             self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
+            # self.norm = nn.LayerNorm(cfg.d_model)
         
     def forward(self, AV):
         """
@@ -116,11 +117,8 @@ class TAN(nn.Module):
 
         if self.no_sen_fusion:
             map2d = map2d.permute(0, 2, 3, 1) # bs*num_sent, num_seg, num_seg, d_model
-            # map2d = F.normalize(map2d, dim=-1)
         else:
-            # S = self.encode_S(S)
             # Fuse sentence and feature by Hamard Product
-            # map2d = map2d * S[:, :, None, None]
             map2d = F.normalize(map2d, dim=1)
             
             # convs

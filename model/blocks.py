@@ -121,7 +121,6 @@ class Transpose(nn.Module):
 
 
 class ResidualConnection(nn.Module):
-
     def __init__(self, size, dout_p):
         super(ResidualConnection, self).__init__()
         self.norm = nn.LayerNorm(size)

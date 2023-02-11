@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from model.multihead_attention import MultiheadedAttention
-from model.blocks import ResidualConnection, PositionwiseFeedForward, PositionalEncoder, VocabularyEmbedder
+from model.blocks import ResidualConnection, PositionwiseFeedForward, PositionalEncoder, VocabularyEmbedder, BridgeConnection
 from .rnn import GRU
 
 
@@ -39,9 +39,9 @@ class CrossAttention(nn.Module):
         super().__init__()
 
         self.num_head = cfg.num_head
-        self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
-        self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
-        self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
+        self.to_q = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
+        self.to_k = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
+        self.to_v = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
         # self.norm = nn.LayerNorm(cfg.d_model)
 
         self.text_norm = nn.LayerNorm(cfg.d_model)
@@ -85,7 +85,6 @@ class CrossAttention(nn.Module):
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
-        # out = F.normalize(out, dim=-1)
         
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
@@ -97,8 +96,9 @@ class CrossDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(cfg.dout_p)
 
         # text self attn
-        self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, cfg.d_model)
-        self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
+        # self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, 192)
+        # self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
+        self.gru = GRU(cfg, num_layers=1)
 
         # cross attn
         # self.av_weight = nn.Parameter(torch.Tensor([1.]))
@@ -107,7 +107,6 @@ class CrossDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(cfg.dout_p)
         self.norm1 = nn.LayerNorm(cfg.d_model)
         self.norm2 = nn.LayerNorm(cfg.d_model)
-
 
         # ff
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
@@ -125,15 +124,16 @@ class CrossDecoderLayer(nn.Module):
         """
         
         # text self attention + residual
-        text = self.res1(text, lambda x: self.text_att(x,x,x, text_mask))
+        # text = self.res1(text, lambda x: self.text_att(x,x,x, text_mask))
 
         # cross_attn + res
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        # text = F.normalize(text, dim=-1) + res * self.av_weight
-        text = self.norm1(text) + self.dropout(self.norm2(res) * self.av_weight)
+        text = text + self.dropout(self.norm2(res) * self.av_weight)
 
         # ff + res
         text = self.res2(text, self.ff)
+
+        text = self.gru(text)
 
         return text, attn
 

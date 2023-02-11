@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=d192_gru3_dec6
+exp_name=gru_cross_decoder
 
 ## procedure
 procedure='train_test'
@@ -17,23 +17,23 @@ num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
 num_encoder_layers=2
-num_decoder_layers=6
+num_decoder_layers=4
 num_gru_layers=3
-d_model=192
-dout_p=0.2
+d_model=256
+dout_p=0.3
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
 min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='0 1'
+device_ids='4 5'
 batch_size=2 # per device
 num_workers=4
 weight_decay=0.0002
 lr=0.001
 sim_weight=0
-tan_weight=0
+tan_weight=0.3
 dialog_weight=1.0
 caption_weight=0.3
 epoch_num=195
@@ -46,9 +46,9 @@ topk=4
 topp=0.92
 
 ## log and debug
-#debug="--debug"
-#dont_log="--dont_log"
-#wandb=""
+# debug="--debug"
+# dont_log="--dont_log"
+# wandb=""
 debug=""
 dont_log=""
 wandb="--wandb"
@@ -67,9 +67,10 @@ log_dir=./log
 # fi
 # convert data
 # echo "Coverting json files to csv for the tool"
-# python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
-# python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
-# python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
+# generate_csv=utils/generate_csv.py
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
 # return
 
 # train
@@ -117,3 +118,5 @@ python main.py \
  $dont_log \
  $last_only \
  $wandb \
+
+
