@@ -1,3 +1,5 @@
+from pdb import set_trace as bp
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,12 +26,22 @@ class LabelSmoothing(nn.Module):
         # make the padding token to have zero probability
         dist[:, self.pad_idx] = 0
         # ?? mask: 1 if target == pad_idx; 0 otherwise
+<<<<<<< HEAD
+=======
+        # bp()
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
         mask = torch.nonzero((target == self.pad_idx) | (target == self.cls_idx))
         
         if mask.sum() > 0 and len(mask) > 0:
             # dim, index, val
             dist.index_fill_(0, mask.squeeze(), 0)
+<<<<<<< HEAD
         
         n_tokens = ((target != self.pad_idx) & (target != self.cls_idx)).sum()
 
+=======
+
+        n_tokens = ((target != self.pad_idx) & (target != self.cls_idx)).sum()
+            
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
         return F.kl_div(pred, dist, reduction='sum') / n_tokens

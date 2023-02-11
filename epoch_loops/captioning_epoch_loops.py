@@ -438,6 +438,7 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         )
 
         summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
+<<<<<<< HEAD
 
         sim_loss, tan_loss, dialog_loss, caption_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
@@ -447,6 +448,17 @@ def training_loop(cfg, model, loader, optimizer, epoch):
             compute_loss=True
         )
 
+=======
+
+        sim_loss, tan_loss, dialog_loss, caption_loss = model(
+            batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
+            dialog_x, dialog_y,
+            summary_x, summary_y,
+            batch['tan_label'], batch['tan_mask'],
+            compute_loss=True
+        )
+
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
         # multi device
         sim_loss = sim_loss.mean()
         tan_loss = tan_loss.mean()
@@ -733,4 +745,20 @@ def validation_1by1_loop(cfg, model, loader, epoch):
                                     last_only=cfg.last_only,
                                     verbose=False).evaluate()
 
+<<<<<<< HEAD
         return val_metrics, duration
+=======
+        return val_metrics, duration
+
+
+
+# Q: is that a man in the video ? A: yes , it is a man 
+# Q: is he the only person in the video ? A: yes , from beginning to end he is the only one . 
+# Q: where is he ? A: he is in what looks like a bedroom 
+# Q: what is he doing ? A: he is wiping his head with a towel 
+# Q: what does he do after that ? A: he removes his jacket and puts it down 
+# Q: does he sit the entire time ? A: no , when he walks into the room , he takes the towel from his closet , then removes his jacket , sits on the bed . soon he gets up , puts the towel away and puts his jacket on . 
+# Q: does he move fast or slow ? A: he is quite slow , never seems to be in a hurry 
+# Q: does he smile or laugh ? A: no , he does not show any emotions throughout the video 
+# Q: can you hear any noise ? A: no , there is no noise from people or from television
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c

@@ -3,7 +3,7 @@ from pdb import set_trace as bp
 import torch
 import torch.nn as nn
 from torch.functional import F
-
+from model.blocks import PositionwiseFeedForward
 from .utils import get_valid_position, get_2d_position, get_pooling_counts
 
 from model.blocks import PositionwiseFeedForward
@@ -94,8 +94,11 @@ class TAN(nn.Module):
         self.norm = nn.LayerNorm(cfg.d_model)
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
         if not self.no_sen_fusion:
+            self.norm = nn.LayerNorm(cfg.d_model)
             self.convs = Convs(cfg, self.mask2d)
             self.encode_S = nn.Linear(cfg.d_model, cfg.d_model)
+
+        self.mlp = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, cfg.dout_p)
         
     def forward(self, AV):
         """
@@ -106,9 +109,14 @@ class TAN(nn.Module):
             map2d: bs, num_sent, num_valid, d_model
         """
         
-        bs, num_sent, num_seg, d_model = AV.size()
+        bs, num_seg, d_model = AV.size()
         # let batch processing more convinience
+<<<<<<< HEAD
         AV = AV.contiguous().view(-1, num_seg, d_model)
+=======
+        # AV = AV.contiguous().view(-1, num_seg, d_model)
+        AV = AV.contiguous()
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
         
         # build map2d
         AV = AV.transpose(-1, -2) # for cnn and pooling
@@ -116,12 +124,9 @@ class TAN(nn.Module):
 
         if self.no_sen_fusion:
             map2d = map2d.permute(0, 2, 3, 1) # bs*num_sent, num_seg, num_seg, d_model
-            # map2d = F.normalize(map2d, dim=-1)
         else:
-            # S = self.encode_S(S)
-            # Fuse sentence and feature by Hamard Product
-            # map2d = map2d * S[:, :, None, None]
             map2d = F.normalize(map2d, dim=1)
+<<<<<<< HEAD
             
             # convs
             map2d = self.convs(map2d) # bs*sent, N, N, d_model
@@ -137,3 +142,16 @@ class TAN(nn.Module):
         map2d = map2d[:, :, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_sent, num_valid, d_model
         
         return map2d, video_emb
+=======
+            map2d = self.convs(map2d) # bs, N, N, d_model
+        
+        map2d = self.norm(map2d)
+        map2d = self.mlp(map2d)
+        
+        # return valid_position
+        va = self.valid_position
+        video_emb = map2d[:, 0, -1]
+        map2d = map2d[:, va[:, 0].tolist(), va[:, 1].tolist()] # bs, num_valid, d_model
+        
+        return map2d, video_emb
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c

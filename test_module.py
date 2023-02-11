@@ -1,21 +1,19 @@
+# import torch
 
-if __name__ == '__main__':
+# def get_sent_indices(text_indices, sent_start_idx=0, sent_end_idx=1):
+#     sent_indices = (text_indices == sent_start_idx).long() 
+#     for i in range(1, text_indices.size()[1]):
+#         sent_indices[:, i] += sent_indices[:, i-1]
+#     sent_indices -= 1
+#     return sent_indices
 
-    import pandas as pd
-    wandb.init(
-            project='avsd', 
-            name=cfg.exp_name,
-            config = {
-                'epoch': cfg.epoch_num,
-                'lr': cfg.lr,
-                'bs': cfg.train_batch_size,
-                'd_model': cfg.d_model,
-                'num_encoder_layers': cfg.num_encoder_layers,
-                'num_head': cfg.num_head,
-                'num_seg': cfg.num_seg,
-                'num_cnn_layer': cfg.num_cnn_layer,
-                'weight_decay': cfg.weight_decay,
-                'optimizer': cfg.optimizer,
-            }
-        )
+
+# def get_mask(text_indices, sent_indices):
+#     bs, seq_len = text_indices.size()
+#     mask = torch.ones((seq_len, seq_len), dtype=torch.bool).triu(1)
+#     for i in 
+
     
+    
+
+

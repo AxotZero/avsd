@@ -12,9 +12,10 @@ from .av_encoder import AVEncoder, AVFusion, AVMapping
 from .tan import TAN
 from .decoder import UniDecoder, CrossDecoder 
 from .rnn import GRU
-
 from loss import TanLoss, TanIouMeanLoss, LabelSmoothing, ContrasitiveLoss
 
+def exist(x):
+    return x is not None
 
 class AVSDTan(nn.Module):
     def __init__(self, cfg, train_dataset):
@@ -22,6 +23,7 @@ class AVSDTan(nn.Module):
         vocab_size = train_dataset.vocab_size
         self.d_model = cfg.d_model
         self.last_only = cfg.last_only
+
         # margin of sentence
         self.pad_idx = train_dataset.pad_idx
         self.cls_idx = train_dataset.cls_idx
@@ -32,9 +34,9 @@ class AVSDTan(nn.Module):
         # encode features
         self.uni_decoder = UniDecoder(cfg, vocab_size, self.cls_idx)
 
-        # encode word embedding
+        # encode av
         self.av_encoder = AVEncoder(cfg)
-        self.av_fusion = AVFusion(cfg)
+        self.av_fusion = AVMapping(cfg)
         self.tan = TAN(cfg)
 
         self.cross_decoder = CrossDecoder(cfg)
@@ -122,6 +124,54 @@ class AVSDTan(nn.Module):
             caption_loss = self.gen_loss(gen_caption, caption_y)
             return sim_loss, tan_loss, dialog_loss, caption_loss
 
+    def forward(self, 
+                feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
+                dialog_x=None, dialog_y=None,                   # dialog
+                caption_x=None, caption_y=None,                 # caption
+                tan_target=None, tan_mask=None,                 # tan
+                map2d=None, compute_loss=True, ret_map2d=False):# return something
+
+        # get map2d
+        if map2d is None:
+            map2d, video_emb = self.embed_map2d(
+                feats['rgb'], feats['flow'], feats['audio'], 
+                vis_mask=visual_mask, aud_mask=audio_mask
+            )
+        
+        # gen dialog
+        if dialog_x is not None:
+            dialog_pad_mask, dialog_text_mask = self.get_mask(dialog_x)
+            pred_dialog = self.text_uni_decoder(dialog_x, dialog_text_mask, get_caption_emb=False)
+            pred_dialog, attn_w = self.text_cross_decoder(pred_dialog, map2d, dialog_text_mask)
+            pred_dialog = self.generator(pred_dialog)
+            
+            # process attn_w
+            sent_indices = self.get_sent_indices(dialog_x)
+            attn_w = self.compute_sentence_attn_w(attn_w, dialog_pad_mask, sent_indices)
+        
+        # gen caption
+        if caption_x is not None:
+            _, caption_text_mask = self.get_mask(caption_x)
+            pred_caption, caption_emb = self.text_uni_decoder(caption_x, caption_text_mask, get_caption_emb=True)
+            pred_caption, _ = self.text_cross_decoder(pred_caption, map2d, caption_text_mask)
+            pred_caption = self.generator(pred_caption)
+
+        # compute_loss
+        if compute_loss:
+            sim_loss = self.sim_loss(video_emb, caption_emb)
+            tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
+            dialog_loss = self.gen_loss(pred_dialog, dialog_y)
+            caption_loss = self.gen_loss(pred_caption, caption_y)
+            return sim_loss, tan_loss, dialog_loss, caption_loss
+        
+        # return
         if ret_map2d:
+<<<<<<< HEAD
             return gen_dialog, attn_w, map2d
         return gen_dialog, attn_w
+=======
+            return pred_dialog, attn_w, map2d
+        return pred_dialog, attn_w
+        
+        
+>>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c

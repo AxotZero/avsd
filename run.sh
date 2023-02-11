@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=d192_gru3_dec6
+exp_name=change_arch
 
 ## procedure
 procedure='train_test'
@@ -16,10 +16,10 @@ seg_method='sample'
 num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
-num_encoder_layers=2
-num_decoder_layers=6
-num_gru_layers=3
-d_model=192
+num_encoder_layers=3
+num_decoder_layers=3
+num_gru_layers=2
+d_model=256
 dout_p=0.2
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
@@ -27,17 +27,17 @@ min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='0 1'
-batch_size=2 # per device
+device_ids='4 5'
+batch_size=4 # per device
 num_workers=4
 weight_decay=0.0002
-lr=0.001
-sim_weight=0
-tan_weight=0
+lr=0.0003
+sim_weight=0.1
+tan_weight=0.2
 dialog_weight=1.0
-caption_weight=0.3
-epoch_num=195
-one_by_one_starts_at=200
+caption_weight=0.2
+epoch_num=200
+one_by_one_starts_at=195
 
 ## decoding_method
 decoding_method='greedy'
