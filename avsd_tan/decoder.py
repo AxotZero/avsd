@@ -96,9 +96,9 @@ class CrossDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(cfg.dout_p)
 
         # text self attn
-        # self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, 192)
-        # self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
-        self.gru = GRU(cfg, num_layers=1)
+        self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, 192)
+        self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
+        # self.gru = GRU(cfg, num_layers=1)
 
         # cross attn
         # self.av_weight = nn.Parameter(torch.Tensor([1.]))
@@ -124,16 +124,16 @@ class CrossDecoderLayer(nn.Module):
         """
         
         # text self attention + residual
-        # text = self.res1(text, lambda x: self.text_att(x,x,x, text_mask))
+        text = self.res1(text, lambda x: self.text_att(x,x,x, text_mask))
 
         # cross_attn + res
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        text = text + self.dropout(self.norm2(res) * self.av_weight)
+        text = self.norm1(text) + self.dropout(self.norm2(res) * self.av_weight)
 
         # ff + res
         text = self.res2(text, self.ff)
 
-        text = self.gru(text)
+        # text = self.gru(text)
 
         return text, attn
 

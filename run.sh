@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=gru_cross_decoder
+exp_name=bridge_self_att
 
 ## procedure
 procedure='train_test'
