@@ -35,7 +35,7 @@ class VisualEncoder(nn.Module):
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*4,
+            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*2,
             dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
@@ -73,7 +73,7 @@ class AudioEncoder(nn.Module):
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*4,
+            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*2,
             dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
@@ -165,7 +165,6 @@ class BottleneckTransformer(nn.Module):
         return a, b
 
 
-
 class CrossTransformer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -213,7 +212,8 @@ class AVEncoder(nn.Module):
             pre_dout=0.2
         )
         self.cross_encoder = BottleneckTransformer(cfg)
-        # self.cross_encoder = CrossTransformer(cfg)
+        self.visual_weight = 2
+        self.audio_weight = 0.5
 
     
     def forward(self, rgb, flow, aud, vis_mask=None, aud_mask=None):
@@ -222,8 +222,8 @@ class AVEncoder(nn.Module):
 
         v, a = self.cross_encoder(v, a, a_mask=vis_mask, b_mask=aud_mask)
 
-        v = get_seg_feats(v, self.num_seg, vis_mask, method=self.seg_method)
-        a = get_seg_feats(a, self.num_seg, aud_mask, method=self.seg_method)
+        v = get_seg_feats(v, self.num_seg, vis_mask, method=self.seg_method) * self.visual_weight
+        a = get_seg_feats(a, self.num_seg, aud_mask, method=self.seg_method) * self.audio_weight
         return v, a
 
 
@@ -235,7 +235,7 @@ class AVMapping(nn.Module):
     
     def forward(self, A, V, S, **kwargs):
         num_sen = S.size()[1]
-        AV = torch.cat([A,V], dim=-1) 
+        AV = torch.cat([A,V], dim=-1)
         AV = self.mapping(AV) # bs, num_seg, d_model
         AV = AV.unsqueeze(1).expand(-1, num_sen, -1, -1)
         return AV
@@ -250,11 +250,14 @@ class AVFusion(nn.Module):
 
         self.d_k = self.d_model // self.num_head
 
-        self.to_q = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
-        self.to_k = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
-        self.to_v = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
+        self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
+        self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
+        self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
 
-        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model, dout_p=0.0)
+        # self.av_norm = nn.LayerNorm(cfg.d_model)
+        self.s_norm = nn.LayerNorm(cfg.d_model)
+
+        self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
     
     def forward(self, A, V, S=None):
         """
@@ -269,6 +272,7 @@ class AVFusion(nn.Module):
         bs, num_seg, d_model = A.size()
         num_sen = 1
         av = torch.stack([A, V], dim=2) # bs, num_seg, 2, d_model
+        # av = self.av_norm(av)
         v = self.to_v(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
 
         if S is None:
@@ -278,6 +282,7 @@ class AVFusion(nn.Module):
             # av fusion by text embedding
             num_sen = S.size()[1]
             # use each sentence feature as query to fuse each AV segment
+            S = self.s_norm(S)
             q = self.to_q(S ).view(bs, num_sen, 1, 1, self.num_head, self.d_k)
             k = self.to_k(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
             # compute attention

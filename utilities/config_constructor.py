@@ -130,3 +130,4 @@ class Config(object):
         self.tan_weight = args.tan_weight
         self.dialog_weight = args.dialog_weight
         self.caption_weight = args.caption_weight
+        self.shrank = args.shrank

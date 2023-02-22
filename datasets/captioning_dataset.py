@@ -53,6 +53,7 @@ def caption_iterator(cfg, batch_size, phase):
 
     vectors = torchtext.vocab.GloVe(name='840B', dim=300, cache='./.vector_cache')
     text_fields = [dataset.dialog, dataset.caption, dataset.summary]
+    # text_fields = [dataset.dialog]
     # build vocab
     DIALOG.build_vocab(*text_fields, min_freq=cfg.min_freq_caps, vectors=vectors)
     setattr(CAPTION, 'vocab', DIALOG.vocab)
@@ -197,6 +198,7 @@ class AudioVideoFeaturesDataset(Dataset):
             
             # get clip feature
             feat_len = max(min(len(vid_stack_rgb), len(vid_stack_flow), len(aud_stack)), self.num_seg)
+            # feat_len = self.num_seg
             vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, feat_len, method=self.cfg.seg_method)
             vid_stack_flow = self.get_seg_feats(vid_stack_flow, feat_len, method=self.cfg.seg_method)
             aud_stack = self.get_seg_feats(aud_stack, feat_len, method=self.cfg.seg_method)
@@ -292,6 +294,7 @@ class AVSD10Dataset(Dataset):
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.phase = phase
+        self.shrank = cfg.shrank
         self.get_full_feat = get_full_feat
 
         if phase == 'train':
@@ -308,6 +311,7 @@ class AVSD10Dataset(Dataset):
 
         # caption dataset *iterator*
         self.train_vocab, self.caption_loader = caption_iterator(cfg, self.batch_size, self.phase)
+        print('num_vocab', len(self.train_vocab))
         
         self.vocab_size = len(self.train_vocab)
         self.pad_idx = self.train_vocab.stoi[cfg.pad_token]
@@ -332,6 +336,32 @@ class AVSD10Dataset(Dataset):
         ret['caption'] = caption_data.caption
         ret['summary'] = caption_data.summary
         ret['dialog'] = caption_data.dialog
+
+        if self.phase in ('train', 'val') and self.shrank:
+            shrank_ids = sorted(random.sample(range(10), random.randint(1, 10)))
+            shranked_dialogs = []
+            for dialog in caption_data.dialog:
+                shranked_dialog = []
+                sent_count = -2
+                start_idx = 1
+                for i, token in enumerate(dialog):
+                    if token in (self.sent_start_idx, self.end_idx):
+                        sent_count += 1
+                        if sent_count in shrank_ids:
+                            end_idx = i+1 if token == self.end_idx else i
+                            shranked_dialog.append(dialog[start_idx:end_idx])
+                        start_idx = i
+                shranked_dialog = torch.cat(shranked_dialog, dim=0)
+                shranked_dialog = torch.cat([torch.tensor([self.start_idx]).long(), shranked_dialog], dim=0)
+                shranked_dialogs.append(shranked_dialog)
+            
+            shranked_dialogs = pad_sequence(shranked_dialogs, batch_first=True, padding_value=self.pad_idx)
+            ret['dialog'] = shranked_dialogs
+            
+            # bp()
+            ret['tan_label'] = ret['tan_label'][:, shrank_ids] # bs, num_sent, num_valid
+            ret['tan_mask'] = ret['tan_mask'][:, shrank_ids] # bs, num_sent
+            
         return ret
 
 

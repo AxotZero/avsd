@@ -85,7 +85,6 @@ class CrossAttention(nn.Module):
         # model output
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
-        # out = F.normalize(out, dim=-1)
         
         return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
@@ -129,7 +128,6 @@ class CrossDecoderLayer(nn.Module):
 
         # cross_attn + res
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        # text = F.normalize(text, dim=-1) + res * self.av_weight
         text = self.norm1(text) + self.dropout(self.norm2(res) * self.av_weight)
 
         # ff + res

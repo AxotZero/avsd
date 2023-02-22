@@ -36,7 +36,7 @@ def train_cap(cfg):
                 'optimizer': cfg.optimizer,
             }
         )
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    # torch.multiprocessing.set_sharing_strategy('file_system')
     # doing our best to make it replicable
     torch.manual_seed(0)
     np.random.seed(0)

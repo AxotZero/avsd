@@ -49,6 +49,7 @@ class VocabularyEmbedder(nn.Module):
         if weight_matrix is None:
             print('Training word embeddings from scratch')
         else:
+            print('Load Pretrained Glove Emb')
             pretrained_voc_size, pretrained_emb_dim = weight_matrix.shape
             if self.emb_dim == pretrained_emb_dim:
                 self.embedder = self.embedder.from_pretrained(weight_matrix)

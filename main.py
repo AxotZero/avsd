@@ -75,7 +75,7 @@ def get_parser():
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument(
-        '--smoothing', type=float, default=0.7,
+        '--smoothing', type=float, default=0,
         help='smoothing coeff (= 0 cross ent loss, more -- stronger smoothing) must be in [0, 1]'
     )
     parser.add_argument('--grad_clip', type=float, help='max grad norm for gradients')
@@ -152,6 +152,7 @@ def get_parser():
     parser.add_argument('--tan_weight', type=float, default=1.0)
     parser.add_argument('--dialog_weight', type=float, default=1.0)
     parser.add_argument('--caption_weight', type=float, default=1.0)
+    parser.add_argument('--shrank', action='store_true')
 
     
     parser.set_defaults(to_log=True)

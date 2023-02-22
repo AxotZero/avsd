@@ -31,6 +31,7 @@ class AVSDTan(nn.Module):
 
         # encode features
         self.uni_decoder = UniDecoder(cfg, vocab_size, self.cls_idx)
+        self.uni_decoder.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
 
         # encode word embedding
         self.av_encoder = AVEncoder(cfg)
@@ -73,6 +74,7 @@ class AVSDTan(nn.Module):
         AV = self.av_fusion(A, V, sent_feats) # bs, num_sen, num_seg, d_model
         map2d, video_emb = self.tan(AV) # bs, num_sent, num_valid, d_model
         return map2d, video_emb
+        # return AV, None
 
     def forward(self, 
                 feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
@@ -121,6 +123,7 @@ class AVSDTan(nn.Module):
             dialog_loss = self.gen_loss(gen_dialog, dialog_y)
             caption_loss = self.gen_loss(gen_caption, caption_y)
             return sim_loss, tan_loss, dialog_loss, caption_loss
+            # return None, None, dialog_loss, caption_loss
 
         if ret_map2d:
             return gen_dialog, attn_w, map2d
