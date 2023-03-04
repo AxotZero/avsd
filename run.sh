@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=ce_w1e-4_d192_dlayer8
+exp_name=bridge_self_att
 
 ## procedure
 procedure='train_test'
@@ -17,10 +17,10 @@ num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
 num_encoder_layers=2
-num_decoder_layers=8
-num_gru_layers=4
-d_model=192
-dout_p=0.2
+num_decoder_layers=4
+num_gru_layers=3
+d_model=256
+dout_p=0.3
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
 min_iou=0.5
@@ -73,10 +73,10 @@ log_dir=./log
 # fi
 # convert data
 # echo "Coverting json files to csv for the tool"
-# python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
-# python utils/generate_csv.py duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
-# python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
-# python utils/generate_csv.py duration_info/duration_Charades_vu17_test_480.csv $test_set2 test ./data/dstc10_test2.csv
+# generate_csv=utils/generate_csv.py
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
 # return
 
 # train
@@ -125,5 +125,5 @@ python main.py \
  $dont_log \
  $last_only \
  $wandb \
- $shrank \
-#  --unfreeze_word_emb \
+
+

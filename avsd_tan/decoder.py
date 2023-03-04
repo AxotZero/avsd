@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from model.multihead_attention import MultiheadedAttention
-from model.blocks import ResidualConnection, PositionwiseFeedForward, PositionalEncoder, VocabularyEmbedder
+from model.blocks import ResidualConnection, PositionwiseFeedForward, PositionalEncoder, VocabularyEmbedder, BridgeConnection
 from .rnn import GRU
 
 
@@ -39,9 +39,9 @@ class CrossAttention(nn.Module):
         super().__init__()
 
         self.num_head = cfg.num_head
-        self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
-        self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
-        self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
+        self.to_q = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
+        self.to_k = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
+        self.to_v = BridgeConnection(cfg.d_model, cfg.d_model, cfg.dout_p)
         # self.norm = nn.LayerNorm(cfg.d_model)
 
         self.text_norm = nn.LayerNorm(cfg.d_model)
@@ -97,8 +97,9 @@ class CrossDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(cfg.dout_p)
 
         # text self attn
-        self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, cfg.d_model)
+        self.text_att = MultiheadedAttention(cfg.d_model, cfg.d_model, cfg.d_model, cfg.num_head, cfg.dout_p, 192)
         self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
+        # self.gru = GRU(cfg, num_layers=1)
 
         # cross attn
         # self.av_weight = nn.Parameter(torch.Tensor([1.]))
@@ -107,7 +108,6 @@ class CrossDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(cfg.dout_p)
         self.norm1 = nn.LayerNorm(cfg.d_model)
         self.norm2 = nn.LayerNorm(cfg.d_model)
-
 
         # ff
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
@@ -133,6 +133,8 @@ class CrossDecoderLayer(nn.Module):
 
         # ff + res
         text = self.res2(text, self.ff)
+
+        # text = self.gru(text)
 
         return text, attn
 

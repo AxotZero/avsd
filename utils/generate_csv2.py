@@ -31,6 +31,8 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
             d['start'] = 0
             d['caption'] = 'C: ' + (item1['caption'] if cap in item1 else '') + ' CLS'
             d['summary'] = 'S: ' + (item1['summary'] if cap in item1 else '') + ' CLS'
+            for cap in ['caption', 'summary']:
+                d[cap] = 'C: ' + (item1[cap] if cap in item1 else '') + ' CLS'
             d['phase'] = phase
 
             dialogs = item1['dialog']
