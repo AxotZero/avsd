@@ -73,6 +73,7 @@ class CrossAttention(nn.Module):
         
         ## only attn to given attn_sent_index av_feat 
         # for k and v, get the corresponding feature map of each word for text
+        # bp()
         batch_indices = [[i] for i in range(bs)]
         k = k[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k
         v = v[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k

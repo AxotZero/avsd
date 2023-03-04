@@ -121,7 +121,7 @@ def get_parser():
         '--use_linear_embedder', dest='use_linear_embedder', action='store_true', default=False,
         help='Whether to include a dense layer between the raw features and input to the model'
     )
-    parser.add_argument('--num_head', type=int, default=4, help='number of heads in multiheaded attention')
+    parser.add_argument('--num_head', type=int, default=8, help='number of heads in multiheaded attention')
     parser.add_argument(
         '--d_ff_video', type=int, help='size of the internal layer of PositionwiseFeedForward')
     parser.add_argument(

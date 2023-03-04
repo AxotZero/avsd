@@ -120,23 +120,23 @@ def train_cap(cfg):
 
         # validation (1-by-1 word)
         if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
-            val_metrics, duration = validation_1by1_loop(
-                cfg, model, val_loader, epoch)
-            if cfg.wandb:
-                wandb.log(
-                    {
-                        f'val_metric/{metric}': score * 100 
-                        for metric, score in val_metrics.items()
-                    },
-                    step=epoch
-                )
+        #     val_metrics, duration = validation_1by1_loop(
+        #         cfg, model, val_loader, epoch)
+        #     if cfg.wandb:
+        #         wandb.log(
+        #             {
+        #                 f'val_metric/{metric}': score * 100 
+        #                 for metric, score in val_metrics.items()
+        #             },
+        #             step=epoch
+        #         )
                 
-            print('-' * 25)
-            for metric, score in val_metrics.items():
-                print('| %s: %2.4f' % (metric, 100 * score))
-            print('-' * 25)
-            print('duration_of_1by1:', duration / 60, epoch)
-            sys.stdout.flush()
+        #     print('-' * 25)
+        #     for metric, score in val_metrics.items():
+        #         print('| %s: %2.4f' % (metric, 100 * score))
+        #     print('-' * 25)
+        #     print('duration_of_1by1:', duration / 60, epoch)
+        #     sys.stdout.flush()
 
             if (num_epoch_best_metric_unchanged == cfg.early_stop_after):
                 break

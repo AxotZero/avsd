@@ -4,23 +4,23 @@
 
 datapath=data/features
 
-exp_name=cross_entropy2
+exp_name=ce_w1e-4_d192_dlayer8
 
 ## procedure
-# procedure='train_test'
+procedure='train_test'
 # procedure='train'
-procedure='test'
+# procedure='test'
 
 ## model config
-seg_method='sample'
+seg_method='mean'
 num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
 num_encoder_layers=2
-num_decoder_layers=4
-num_gru_layers=2
+num_decoder_layers=8
+num_gru_layers=4
 d_model=192
-dout_p=0.1
+dout_p=0.2
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
 min_iou=0.5
@@ -30,21 +30,23 @@ max_iou=1.0
 device_ids='4 5'
 batch_size=2 # per device
 num_workers=4
-weight_decay=0.0002
+weight_decay=0.0001
 lr=0.0003
 sim_weight=0
 tan_weight=1
 dialog_weight=0.5
 caption_weight=0
-shrank='--shrank'
-# shrank=''
-epoch_num=195
-one_by_one_starts_at=200
+min_freq_caps=2
+smoothing=0
+# shrank='--shrank'
+shrank=''
+epoch_num=50
+one_by_one_starts_at=100
 
 ## decoding_method
-decoding_method='greedy'
+# decoding_method='greedy'
 # decoding_method='topk_topp'
-# decoding_method='beam_search'
+decoding_method='beam_search'
 topk=4
 topp=0.92
 
@@ -82,7 +84,7 @@ echo Start training
 python main.py \
  --train_meta_path ./data/dstc10_train.csv \
  --val_meta_path ./data/dstc10_val.csv \
- --test_meta_path ./data/dstc10_test2.csv \
+ --test_meta_path ./data/dstc10_test.csv \
  --reference_paths $val_set \
  --procedure $procedure \
  --batch_size $batch_size \
@@ -117,9 +119,11 @@ python main.py \
  --tan_weight $tan_weight \
  --dialog_weight $dialog_weight \
  --caption_weight $caption_weight \
+ --min_freq_caps $min_freq_caps \
+ --smoothing $smoothing \
  $debug \
  $dont_log \
  $last_only \
  $wandb \
-#  $shrank \
+ $shrank \
 #  --unfreeze_word_emb \

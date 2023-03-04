@@ -109,6 +109,7 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
                 current_position += 1
                 trg[batch_indices, current_position] = next_word[:, 0]
                 completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+
             targets.append(out)
             attweights.append(attn[:, -1])
     return sources, targets, attweights
@@ -299,7 +300,8 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                         new_outs.append(
                             (new_out, 
                              score[idx1],
-                             torch.sum(new_out != pad_idx)))
+                             torch.sum(new_out != pad_idx),
+                             attn[idx1]))
                         continue
                     
                     for idx2 in range(beam_size):
@@ -307,7 +309,8 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                         new_outs.append(
                             (new_out, 
                              score[idx1] + new_score[idx1, idx2],
-                             torch.sum(new_out != pad_idx)))
+                             torch.sum(new_out != pad_idx),
+                             attn[idx1]))
                 # bp()
                 new_outs = sorted(new_outs, key=lambda x: x[1] / (x[2] ** length_penalty))[-beam_size:]
                 out = torch.stack([o[0] for o in new_outs], dim=0)
@@ -318,9 +321,10 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                 # current_position += 1
                 # trg[batch_indices, current_position] = next_word[:, 0]
                 # completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+            attn = new_outs[-1][3][-1][None, :]
             out = out[-1][None, :]
             targets.append(out)
-            attweights.append(attn[:, -1])
+            attweights.append(attn)
     return sources, targets, attweights
 
 
@@ -462,11 +466,13 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         )
 
         summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
+        caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
         sim_loss, tan_loss, dialog_loss, caption_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
             dialog_x, dialog_y,
             summary_x, summary_y,
+            caption_x, caption_y,
             batch['tan_label'], batch['tan_mask'],
             compute_loss=True
         )
@@ -558,12 +564,14 @@ def validation_next_word_loop(cfg, model, loader, epoch):
         )
 
         summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
+        caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
         with torch.no_grad():
             sim_loss, tan_loss, dialog_loss, caption_loss = model(
                 batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                 dialog_x, dialog_y,
                 summary_x, summary_y,
+                caption_x, caption_y,
                 batch['tan_label'], batch['tan_mask'],
                 compute_loss=True
             )

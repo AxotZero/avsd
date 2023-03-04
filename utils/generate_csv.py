@@ -4,6 +4,7 @@ import pdb
 import json
 import re
 import pandas as pd
+from pdb import set_trace as bp
 
 def clamp(v, _min, _max):
     return max(_min, min(v, _max))
@@ -29,12 +30,16 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
             d['duration']=item[1]
             d['end'] = item[1]
             d['start'] = 0
-            for cap in ['caption', 'summary']:
-                d[cap] = 'C: ' + (item1[cap] if cap in item1 else '') + ' CLS'
+            d['caption'] = 'C: ' + (item1['caption'] if 'caption' in item1 else '') + ' CLS'
+            d['summary'] = 'C: ' + (item1['summary'] if 'summary' in item1 else '') + ' CLS'
             d['dialog'] = ' '.join(['Q: ' + item_ins['question'] 
                                   + ' A: ' + (item_ins['answer'][0] if type(item_ins['answer'])==list
                                               else item_ins['answer'])
                                     for item_ins in item1['dialog']])
+            
+            if d['dialog'][0] == '"':
+                bp()
+
             if phase in ('train', 'val'):
                 masks, starts, ends = [], [], []
                 # d['seq_start'], d['seq_end'] = [], []

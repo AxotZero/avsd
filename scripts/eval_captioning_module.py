@@ -15,8 +15,8 @@ import wandb
 def eval_cap(cfg):
     cfg.last_only=True
     cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
-    # cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
-    cfg.reference_paths = ['data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
+    cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
+    # cfg.reference_paths = ['data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
     cfg.unfreeze_word_emb = False
     cfg.inference_batch_size = 1
     cfg.device_ids = [cfg.device_ids[0]]
