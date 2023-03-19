@@ -19,10 +19,10 @@ def caption_iterator(cfg, batch_size, phase):
         tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
         pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
     )
-    SUMMARY = data.ReversibleField(
-        tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
-        pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
-    )
+    # SUMMARY = data.ReversibleField(
+    #     tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
+    #     pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
+    # )
     DIALOG = data.ReversibleField(
         tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
         pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
@@ -35,7 +35,7 @@ def caption_iterator(cfg, batch_size, phase):
     fields = [
         ('video_id', None),
         ('caption', CAPTION),
-        ('summary', SUMMARY),
+        # ('summary', SUMMARY),
         ('dialog', DIALOG),
         ('start', None),
         ('end', None),
@@ -57,7 +57,7 @@ def caption_iterator(cfg, batch_size, phase):
     # build vocab
     DIALOG.build_vocab(*text_fields, min_freq=cfg.min_freq_caps, vectors=vectors)
     setattr(CAPTION, 'vocab', DIALOG.vocab)
-    setattr(SUMMARY, 'vocab', DIALOG.vocab)
+    # setattr(SUMMARY, 'vocab', DIALOG.vocab)
 
     train_vocab = DIALOG.vocab
 
@@ -164,7 +164,7 @@ class AudioVideoFeaturesDataset(Dataset):
         return masks
     
     def __getitem__(self, indices):
-        video_ids, captions, summarys, dialogs, starts, ends =[], [], [], [], [], []
+        video_ids, captions, dialogs, starts, ends =[], [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
         sents_iou_target_stacks = []
         tan_masks = []
@@ -172,7 +172,7 @@ class AudioVideoFeaturesDataset(Dataset):
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, summary, dialog, start, end, duration, seq_starts, seq_ends, tan_mask, _, _ = self.dataset.iloc[idx]
+            video_id, caption, dialog, start, end, duration, seq_starts, seq_ends, tan_mask, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.feature_pkl, self.cfg, 
@@ -232,7 +232,7 @@ class AudioVideoFeaturesDataset(Dataset):
 
             # append info for this index to the lists
             video_ids.append(video_id)
-            summarys.append(summary)
+            # summarys.append(summary)
             dialogs.append(dialog)
             captions.append(caption)
             starts.append(int(start))
@@ -264,7 +264,7 @@ class AudioVideoFeaturesDataset(Dataset):
         batch_dict = {
             'video_ids': video_ids,
             'captions': captions,
-            'summarys': summarys,
+            # 'summarys': summarys,
             'dialogs': dialogs,
             'starts': starts,
             'ends': ends,
@@ -322,7 +322,7 @@ class AVSD10Dataset(Dataset):
         self.cls_idx = self.train_vocab.stoi['CLS']
         self.cap_idx = self.train_vocab.stoi['C:']
         self.sum_idx = self.train_vocab.stoi['S:']
-        # bp()
+        
         self.features_dataset = AudioVideoFeaturesDataset(
             feature_pkl, self.meta_path, torch.device(cfg.device), 
             self.pad_idx, self.get_full_feat, cfg
@@ -335,7 +335,7 @@ class AVSD10Dataset(Dataset):
         caption_data = self.caption_datas[index]
         ret = self.features_dataset[caption_data.idx]
         ret['caption'] = caption_data.caption
-        ret['summary'] = caption_data.summary
+        # ret['summary'] = caption_data.summary
         ret['dialog'] = caption_data.dialog
 
         if self.phase in ('train', 'val') and self.shrank:
@@ -359,7 +359,7 @@ class AVSD10Dataset(Dataset):
             shranked_dialogs = pad_sequence(shranked_dialogs, batch_first=True, padding_value=self.pad_idx)
             ret['dialog'] = shranked_dialogs
             
-            # bp()
+            
             ret['tan_label'] = ret['tan_label'][:, shrank_ids] # bs, num_sent, num_valid
             ret['tan_mask'] = ret['tan_mask'][:, shrank_ids] # bs, num_sent
             

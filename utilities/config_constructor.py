@@ -128,6 +128,6 @@ class Config(object):
 
         self.sim_weight = args.sim_weight
         self.tan_weight = args.tan_weight
-        self.dialog_weight = args.dialog_weight
-        self.caption_weight = args.caption_weight
+        self.teacher_weight = args.teacher_weight
+        self.student_weight = args.student_weight
         self.shrank = args.shrank

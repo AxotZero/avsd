@@ -176,7 +176,7 @@ class CrossTransformer(nn.Module):
         
         self.encoder = nn.TransformerEncoder(
             encoder_layer = nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=4, dim_feedforward=d_model*4,
+                d_model=d_model, nhead=8, dim_feedforward=d_model*2,
                 dropout=cfg.dout_p, batch_first=True
             ),
             num_layers=cfg.num_encoder_layers,
@@ -254,7 +254,7 @@ class AVFusion(nn.Module):
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
 
-        # self.av_norm = nn.LayerNorm(cfg.d_model)
+        self.av_norm = nn.LayerNorm(cfg.d_model)
         self.s_norm = nn.LayerNorm(cfg.d_model)
 
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
@@ -272,7 +272,7 @@ class AVFusion(nn.Module):
         bs, num_seg, d_model = A.size()
         num_sen = 1
         av = torch.stack([A, V], dim=2) # bs, num_seg, 2, d_model
-        # av = self.av_norm(av)
+        av = self.av_norm(av)
         v = self.to_v(av).view(bs, 1, num_seg, 2, self.num_head, self.d_k)
 
         if S is None:

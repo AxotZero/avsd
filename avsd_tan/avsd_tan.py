@@ -10,18 +10,19 @@ import torch.nn as nn
 from model.generators import Generator, GruGenerator
 from .av_encoder import AVEncoder, AVFusion, AVMapping
 from .tan import TAN
-from .decoder import UniDecoder, CrossDecoder 
+from .decoder import WordEmb, UniDecoder, CrossDecoder 
 from .rnn import GRU
 
-from loss import TanLoss, TanIouMeanLoss, LabelSmoothing, ContrasitiveLoss
+from loss import TanLoss, TanIouMeanLoss, LabelSmoothing, ContrasitiveLoss, SoftCrossEntropy
 
 
 class AVSDTan(nn.Module):
-    def __init__(self, cfg, train_dataset):
+    def __init__(self, cfg, train_dataset, is_teacher=True):
         super().__init__()
         vocab_size = train_dataset.vocab_size
         self.d_model = cfg.d_model
         self.last_only = cfg.last_only
+        self.is_teacher = is_teacher
 
         # text idx
         self.pad_idx = train_dataset.pad_idx
@@ -34,25 +35,70 @@ class AVSDTan(nn.Module):
         # loss weight
         self.sim_weight = cfg.sim_weight
         self.tan_weight = cfg.tan_weight
-        self.dialog_weight  = cfg.dialog_weight
-        self.caption_weight  = cfg.caption_weight
+        self.teacher_weight  = cfg.teacher_weight
+        self.student_weight  = cfg.student_weight
 
         # encode features
-        self.uni_decoder = UniDecoder(cfg, vocab_size, self.cls_idx)
-        self.uni_decoder.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
+        self.word_emb = WordEmb(cfg, vocab_size)
+        self.word_emb.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
+        self.dialog_uni_decoder = UniDecoder(cfg, vocab_size)
+        self.caption_uni_decoder = UniDecoder(cfg, vocab_size)
 
         # encode word embedding
         self.av_encoder = AVEncoder(cfg)
         self.av_fusion = AVFusion(cfg)
         self.tan = TAN(cfg)
 
-        self.cross_decoder = CrossDecoder(cfg)
+        self.cross_decoder = CrossDecoder(cfg, self.is_teacher)
 
         self.generator = Generator(cfg.d_model, vocab_size)
 
-        self.sim_loss = ContrasitiveLoss()
-        self.tan_loss = TanLoss(cfg.min_iou, cfg.max_iou)
-        self.gen_loss = LabelSmoothing(cfg.smoothing, self.pad_idx, self.cls_idx)
+    def forward(self, 
+                feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
+                dialog_x=None, caption_x=None, 
+                map2d=None):
+
+        rgb, flow, audio = feats['rgb'], feats['flow'], feats['audio']
+        bs = rgb.size(0)
+        
+        # encode dialog
+        dialog_pad_mask, dialog_text_mask = self.get_mask(dialog_x)
+        dialog_embs = self.word_emb(dialog_x)
+        dialog_embs = self.dialog_uni_decoder(dialog_embs)
+
+        
+        # encode video and audio feature and generate fused-map2d
+        if map2d is None:
+            sent_mask = dialog_x == self.sent_end_idx
+            sent_feats = dialog_embs[sent_mask].view(bs, -1, self.d_model) # bs, num_sent, d_dim
+            map2d, _ = self.embed_map2d(rgb, flow, audio, sent_feats, visual_mask, audio_mask)
+
+        # indices which represents each word belongs to which sentence,
+        # to assign which map2d the word need to attend
+        sent_indices = self.get_sent_indices(dialog_x)
+
+        # embs of each word and the averaged attention weight of each sentence
+        if self.is_teacher:
+            caption_pad_mask, caption_text_mask = self.get_mask(caption_x)
+            caption_embs = self.word_emb(caption_x)
+            caption_embs = self.caption_uni_decoder(caption_embs)
+        else:
+            caption_pad_mask, caption_text_mask, caption_embs = [None]*3
+
+
+        dialog_embs, hidden_embs, attn_w = self.cross_decoder(dialog_embs, 
+                                                                map2d, 
+                                                                caption_embs,
+                                                                dialog_pad_mask, dialog_text_mask,
+                                                                caption_pad_mask, caption_text_mask,
+                                                                sent_indices)
+
+
+        # convert to the probability of predicted word
+        gen_dialog = self.generator(dialog_embs)
+        gen_dialog[:, :, self.pad_idx] = 0
+
+        return gen_dialog, hidden_embs, map2d, attn_w
 
     def get_sent_indices(self, text):
         sent_indices = ((text == self.sent_start_idx) | (text == self.cap_idx)).long()
@@ -63,9 +109,12 @@ class AVSDTan(nn.Module):
     def get_mask(self, text):
         bs, num_word = text.size()
         padding_mask = (text != self.pad_idx)
-        mask = torch.ones(1, num_word, num_word)
+        mask = torch.ones(bs, num_word, num_word)
         mask = torch.tril(mask, 0).bool().to(text.get_device())
+
         text_mask = padding_mask.unsqueeze(-2) & mask
+        text_mask = text_mask.unsqueeze(1)
+        padding_mask = padding_mask.view(bs, 1, 1, num_word)
         return padding_mask, text_mask
 
     def embed_map2d(self, rgb, flow, audio, sent_feats=None, visual_mask=None, audio_mask=None):
@@ -79,77 +128,47 @@ class AVSDTan(nn.Module):
         return map2d, video_emb
         # return AV, None
 
-    def forward(self, 
+
+class JST(nn.Module):
+    def __init__(self, cfg, train_dataset):
+        super().__init__()
+        self.teacher = AVSDTan(cfg, train_dataset, is_teacher=True)
+        self.student = AVSDTan(cfg, train_dataset, is_teacher=False)
+
+        self.pad_idx = train_dataset.pad_idx
+        self.cls_idx = train_dataset.cls_idx
+        self.sent_start_idx = train_dataset.sent_start_idx
+        self.sent_end_idx = train_dataset.sent_end_idx
+        self.cap_idx = train_dataset.cap_idx
+        self.sum_idx = train_dataset.sum_idx
+
+        # loss
+        self.sim_loss = nn.MSELoss()
+        self.tan_loss = TanLoss(cfg.min_iou, cfg.max_iou)
+        self.gen_loss = SoftCrossEntropy(self.pad_idx, self.cls_idx, train_dataset.vocab_size)
+
+    def forward(self,
                 feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
                 dialog_x=None, dialog_y=None,                   # dialog
-                summary_x=None, summary_y=None,                 # caption
                 caption_x=None, caption_y=None,                 # caption
                 tan_target=None, tan_mask=None,                 # tan
-                map2d=None, compute_loss=True, ret_map2d=False):# return something
+                map2d=None, ret_map2d=False, compute_loss=True):
 
-        rgb, flow, audio = feats['rgb'], feats['flow'], feats['audio']
-        bs = rgb.size(0)
-
-        if caption_x is not None and self.caption_weight > 0:
-            pad_mask, text_mask = self.get_mask(caption_x)
-            embs, caption_emb = self.uni_decoder(caption_x, text_mask, get_caption_emb=True)
-            cap_map2d, video_emb = self.embed_map2d(rgb, flow, audio, None, visual_mask, audio_mask)            
-            sent_indices = self.get_sent_indices(caption_x)
-            embs, _ = self.cross_decoder(embs, 
-                                         cap_map2d, 
-                                         pad_mask, 
-                                         text_mask,
-                                         sent_indices)
-            gen_caption = self.generator(embs)
+        student_gen_dialog, student_hidden_embs, map2d, attn_w = self.student(
+            feats, visual_mask, audio_mask, dialog_x, caption_x=None, map2d=map2d)
         
-        if summary_x is not None and self.caption_weight > 0:
-            pad_mask, text_mask = self.get_mask(summary_x)
-            embs, caption_emb = self.uni_decoder(summary_x, text_mask, get_caption_emb=True)
-            cap_map2d, video_emb = self.embed_map2d(rgb, flow, audio, None, visual_mask, audio_mask)            
-            sent_indices = self.get_sent_indices(summary_x)
-            embs, _ = self.cross_decoder(embs, 
-                                         cap_map2d, 
-                                         pad_mask, 
-                                         text_mask,
-                                         sent_indices)
-            gen_summary = self.generator(embs)
+        if not compute_loss:
+            if ret_map2d:
+                return student_gen_dialog, attn_w, map2d
+            return student_gen_dialog, attn_w
         
+        teacher_gen_dialog, teacher_hidden_embs, _, _ = self.teacher(
+            feats, visual_mask, audio_mask,  dialog_x, caption_x=caption_x, map2d=None)
+        
+        teacher_gen_loss = self.gen_loss(teacher_gen_dialog, dialog_y)
+        student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y, teacher_gen_dialog.detach())
+        # student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y)
+        sim_loss = self.sim_loss(student_hidden_embs, teacher_hidden_embs)
+        tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
 
-        if dialog_x is not None:
-            # get mask of the text
-            pad_mask, text_mask = self.get_mask(dialog_x)
-            # encode text
-            embs = self.uni_decoder(dialog_x, text_mask, get_caption_emb=False)
-
-            # encode video and audio feature and generate fused-map2d
-            if map2d is None:
-                sent_mask = dialog_x == self.sent_end_idx
-                sent_feats = embs[sent_mask].view(bs, -1, self.d_model) # bs, num_sent, d_dim
-                map2d, _ = self.embed_map2d(rgb, flow, audio, sent_feats, visual_mask, audio_mask)
-
-            # indices which represents each word belongs to which sentence,
-            # to assign which map2d the word need to attend
-            sent_indices = self.get_sent_indices(dialog_x)
-
-            # embs of each word and the averaged attention weight of each sentence 
-            embs, attn_w = self.cross_decoder(embs, 
-                                                map2d, 
-                                                pad_mask, 
-                                                text_mask,
-                                                sent_indices)
-            # convert to the probability of predicted word
-            gen_dialog = self.generator(embs)
-
-        ### loss func
-        if compute_loss:
-            device = gen_dialog.get_device()
-            sim_loss = self.sim_loss(video_emb, caption_emb) if self.sim_weight > 0 else torch.tensor(0.0).to(device)
-            tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
-            dialog_loss = self.gen_loss(gen_dialog, dialog_y)
-            caption_loss = ((self.gen_loss(gen_caption, caption_y) + self.gen_loss(gen_summary, summary_y)) / 2) if self.caption_weight > 0 else torch.tensor(0.0).to(device)
-            
-            return sim_loss, tan_loss, dialog_loss, caption_loss
-
-        if ret_map2d:
-            return gen_dialog, attn_w, map2d
-        return gen_dialog, attn_w
+        return teacher_gen_loss, student_gen_loss, sim_loss, tan_loss

@@ -150,8 +150,8 @@ def get_parser():
 
     parser.add_argument('--sim_weight', type=float, default=1.0)
     parser.add_argument('--tan_weight', type=float, default=1.0)
-    parser.add_argument('--dialog_weight', type=float, default=1.0)
-    parser.add_argument('--caption_weight', type=float, default=1.0)
+    parser.add_argument('--teacher_weight', type=float, default=1.0)
+    parser.add_argument('--student_weight', type=float, default=1.0)
     parser.add_argument('--shrank', action='store_true')
 
     

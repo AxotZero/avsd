@@ -15,7 +15,7 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
     f=open(inp_json,'r')
     d1=json.loads(f.read())
 
-    column_names=['video_id','caption', 'summary','dialog','start','end','duration', 'seq_start', 'seq_end', 'tan_mask', 'phase','idx']
+    column_names=['video_id','caption','dialog','start','end','duration', 'seq_start', 'seq_end', 'tan_mask', 'phase','idx']
     df2=pd.DataFrame(columns = column_names, dtype=object)
     ld={item1['image_id'] : item1 for item1 in d1['dialogs']}
     d_list=[]
@@ -30,8 +30,8 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
             d['duration']=item[1]
             d['end'] = item[1]
             d['start'] = 0
-            d['caption'] = 'C: ' + (item1['caption'] if 'caption' in item1 else '') + ' CLS'
-            d['summary'] = 'C: ' + (item1['summary'] if 'summary' in item1 else '') + ' CLS'
+            d['caption'] = 'C: ' + (item1['caption'] if 'caption' in item1 else '') + ' S: ' + (item1['summary'] if 'summary' in item1 else '')
+            
             d['dialog'] = ' '.join(['Q: ' + item_ins['question'] 
                                   + ' A: ' + (item_ins['answer'][0] if type(item_ins['answer'])==list
                                               else item_ins['answer'])

@@ -11,7 +11,7 @@ from loss.iou_loss import TanLoss, TanIouMeanLoss
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
-from avsd_tan.avsd_tan import AVSDTan
+from avsd_tan.avsd_tan import AVSDTan, JST
 from utils.combine_files import load_pickle
 
 import wandb
@@ -66,7 +66,7 @@ def train_cap(cfg):
     # elif cfg.modality in ['video', 'audio']:
     #     model = Transformer(model_cfg, train_dataset)
 
-    model = AVSDTan(cfg, train_dataset)
+    model = JST(cfg, train_dataset)
 
     # gen_criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
     # iou_mean = load_pickle(f'data/iou_mean_{cfg.min_iou:.1f}-{cfg.max_iou:.1f}_{cfg.num_seg}.pkl')

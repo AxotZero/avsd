@@ -4,38 +4,38 @@
 
 datapath=data/features
 
-exp_name=bridge_self_att
+exp_name=jst_detach2
 
 ## procedure
-procedure='train_test'
+# procedure='train_test'
 # procedure='train'
-# procedure='test'
+procedure='test'
 
 ## model config
-seg_method='mean'
+seg_method='sample'
 num_seg=32
 cnn_kernel_size=5
 num_cnn_layer=2
 num_encoder_layers=2
 num_decoder_layers=4
-num_gru_layers=3
-d_model=256
-dout_p=0.3
+num_gru_layers=2
+d_model=192
+dout_p=0.1
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
 min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='4 5'
+device_ids='2 3'
 batch_size=2 # per device
 num_workers=4
-weight_decay=0.0001
-lr=0.0003
-sim_weight=0
+weight_decay=0.00005
+lr=0.001
+sim_weight=5
 tan_weight=1
-dialog_weight=0.5
-caption_weight=0
+teacher_weight=1
+student_weight=1
 min_freq_caps=2
 smoothing=0
 # shrank='--shrank'
@@ -76,7 +76,7 @@ log_dir=./log
 # generate_csv=utils/generate_csv.py
 # python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
 # python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
-# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set2 test ./data/dstc10_test2.csv
 # return
 
 # train
@@ -84,7 +84,7 @@ echo Start training
 python main.py \
  --train_meta_path ./data/dstc10_train.csv \
  --val_meta_path ./data/dstc10_val.csv \
- --test_meta_path ./data/dstc10_test.csv \
+ --test_meta_path ./data/dstc10_test2.csv \
  --reference_paths $val_set \
  --procedure $procedure \
  --batch_size $batch_size \
@@ -117,8 +117,8 @@ python main.py \
  --topk $topk \
  --sim_weight $sim_weight \
  --tan_weight $tan_weight \
- --dialog_weight $dialog_weight \
- --caption_weight $caption_weight \
+ --teacher_weight $teacher_weight \
+ --student_weight $student_weight \
  --min_freq_caps $min_freq_caps \
  --smoothing $smoothing \
  $debug \

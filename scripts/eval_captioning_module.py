@@ -8,15 +8,15 @@ from epoch_loops.captioning_epoch_loops import (greedy_decoder, validation_1by1_
 from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
-from avsd_tan.avsd_tan import AVSDTan
+from avsd_tan.avsd_tan import AVSDTan, JST
 
 import wandb
 
 def eval_cap(cfg):
     cfg.last_only=True
     cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
-    cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
-    # cfg.reference_paths = ['data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
+    # cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
+    cfg.reference_paths = ['data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
     cfg.unfreeze_word_emb = False
     cfg.inference_batch_size = 1
     cfg.device_ids = [cfg.device_ids[0]]
@@ -38,8 +38,8 @@ def eval_cap(cfg):
 
     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
     model_cfg = cap_model_cpt['config']
-    model = AVSDTan(model_cfg, test_dataset)
-    # bp()
+    model = JST(model_cfg, test_dataset)
+    
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)

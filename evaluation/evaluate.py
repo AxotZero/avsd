@@ -158,7 +158,7 @@ class AVSD_eval(object):
         for scorer, method in self.scorers:
             if self.verbose:
                 print ('computing %s score...'%(scorer.method()))
-            bp()
+            
             score, scores = scorer.compute_score(ref_coco, hypo_coco)
             if type(score) == list:
                 for m, s in zip(method, score):

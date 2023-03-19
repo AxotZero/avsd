@@ -226,6 +226,7 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
     feature_stacks = batch['feature_stacks']
     dialog_idx = batch['dialog']
     start_pos, end_pos = get_context_positions(dialog_idx, sent_start_idx, sent_end_idx)
+    caption_x = batch['caption']
     sources = []
     targets = []
     attweights = []
@@ -278,14 +279,16 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                         batch['feature_stacks'][k] = generate_beam(batch['feature_stacks'][k])
                     batch['visual_mask'] = generate_beam(batch['visual_mask'])
                     batch['audio_mask'] = generate_beam(batch['audio_mask'])
+                    caption_x = generate_beam(caption_x)
                 
                 dialog_x = trg if out.size(-1) <= 1 else torch.cat([trg, out[:, 1:]], dim=-1)
                 preds, attn, map2d = model(
                     batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
-                    dialog_x=dialog_x, map2d=map2d, ret_map2d=True, compute_loss=False
+                    dialog_x=dialog_x, map2d=map2d, caption_x=caption_x, ret_map2d=True, compute_loss=False
                 )
                 # preds: bs, seq_len, num_vocab
                 preds[:, :, 0] = float('-inf')  # suppress UNK
+                preds = F.log_softmax(preds, dim=-1)
                 # next_word = torch.where(completeness_mask==0,
                 #                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
                 #                         end_idx_)
@@ -311,7 +314,7 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                              score[idx1] + new_score[idx1, idx2],
                              torch.sum(new_out != pad_idx),
                              attn[idx1]))
-                # bp()
+                
                 new_outs = sorted(new_outs, key=lambda x: x[1] / (x[2] ** length_penalty))[-beam_size:]
                 out = torch.stack([o[0] for o in new_outs], dim=0)
                 score = torch.stack([o[1] for o in new_outs], dim=0)
@@ -435,7 +438,7 @@ def batch_to_device(batch, device):
     batch['visual_mask'] = batch['visual_mask'].to(device)
     batch['audio_mask'] = batch['audio_mask'].to(device)
     batch['caption'] = batch['caption'].to(device)
-    batch['summary'] = batch['summary'].to(device)
+    # batch['summary'] = batch['summary'].to(device)
     batch['dialog'] = batch['dialog'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
     batch['tan_mask'] = batch['tan_mask'].to(device)
@@ -445,10 +448,10 @@ def batch_to_device(batch, device):
 def training_loop(cfg, model, loader, optimizer, epoch):
     model.train()
     total_loss = 0
-    total_sim_loss = 0
-    total_dialog_loss = 0
-    total_caption_loss = 0
+    total_teacher_gen_loss = 0
+    total_student_gen_loss = 0
     total_tan_loss = 0
+    total_sim_loss = 0
 
     loader.dataset.update_iterator()
     pbar = tqdm(loader, ncols=100)
@@ -465,30 +468,30 @@ def training_loop(cfg, model, loader, optimizer, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
         caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
-        sim_loss, tan_loss, dialog_loss, caption_loss = model(
+        teacher_gen_loss, student_gen_loss, sim_loss, tan_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
             dialog_x, dialog_y,
-            summary_x, summary_y,
             caption_x, caption_y,
             batch['tan_label'], batch['tan_mask'],
             compute_loss=True
         )
 
         # multi device
-        sim_loss = sim_loss.mean()
+        teacher_gen_loss = teacher_gen_loss.mean()
+        student_gen_loss = student_gen_loss.mean()
         tan_loss = tan_loss.mean()
-        dialog_loss = dialog_loss.mean()
-        caption_loss = caption_loss.mean()
+        sim_loss = sim_loss.mean()
 
         loss = (
-            cfg.sim_weight * sim_loss + 
+            cfg.teacher_weight * teacher_gen_loss + 
+            cfg.student_weight * student_gen_loss +
             cfg.tan_weight * tan_loss +
-            cfg.dialog_weight * dialog_loss +
-            cfg.caption_weight * caption_loss
+            cfg.sim_weight * sim_loss
         )
+
+        
         loss.backward()
 
         if cfg.grad_clip is not None:
@@ -497,54 +500,58 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         optimizer.step()
 
         total_loss += loss.item()
-        total_sim_loss += sim_loss.item()
-        total_dialog_loss += dialog_loss.item()
-        total_caption_loss += caption_loss.item()
+        total_teacher_gen_loss += teacher_gen_loss.item()
+        total_student_gen_loss += student_gen_loss.item()
         total_tan_loss += tan_loss.item()
+        total_sim_loss += sim_loss.item()
 
         pbar.set_description(
-            '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+            '{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
                 'train', epoch, 
-                sim_loss.item(), 
+                teacher_gen_loss.item(),
+                student_gen_loss.item(),
                 tan_loss.item(), 
-                caption_loss.item(), 
-                dialog_loss.item()
+                sim_loss.item()
             )
         )
         pbar.update()
 
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
-    total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
+    total_teacher_gen_loss /= len(loader)
+    total_student_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
+    total_sim_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'train/loss': total_loss,
-                'train/sim_loss': total_sim_loss,
+                'train/teacher_gen_loss': total_teacher_gen_loss,
+                'train/student_gen_loss': total_student_gen_loss,
                 'train/tan_loss': total_tan_loss,
-                'train/dialog_loss': total_dialog_loss,
-                'train/caption_loss': total_caption_loss,
+                'train/sim_loss': total_sim_loss
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('train {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+
+    print('{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+        'train', epoch, 
+        total_teacher_gen_loss,
+        total_student_gen_loss,
+        total_tan_loss, 
+        total_sim_loss
     ))
-            
+  
 
 def validation_next_word_loop(cfg, model, loader, epoch):
     model.eval()
     total_loss = 0
-    total_sim_loss = 0
-    total_dialog_loss = 0
-    total_caption_loss = 0
+    total_teacher_gen_loss = 0
+    total_student_gen_loss = 0
     total_tan_loss = 0
+    total_sim_loss = 0
 
     loader.dataset.update_iterator()
     phase = loader.dataset.phase
@@ -563,71 +570,75 @@ def validation_next_word_loop(cfg, model, loader, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
         caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
         with torch.no_grad():
-            sim_loss, tan_loss, dialog_loss, caption_loss = model(
+            teacher_gen_loss, student_gen_loss, sim_loss, tan_loss = model(
                 batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                 dialog_x, dialog_y,
-                summary_x, summary_y,
+                # summary_x, summary_y,
                 caption_x, caption_y,
                 batch['tan_label'], batch['tan_mask'],
                 compute_loss=True
             )
 
             # multi device
-            sim_loss = sim_loss.mean()
+            teacher_gen_loss = teacher_gen_loss.mean()
+            student_gen_loss = student_gen_loss.mean()
             tan_loss = tan_loss.mean()
-            dialog_loss = dialog_loss.mean()
-            caption_loss = caption_loss.mean()
+            sim_loss = sim_loss.mean()
+
 
             loss = (
-                cfg.sim_weight * sim_loss + 
+                cfg.teacher_weight * teacher_gen_loss + 
+                cfg.student_weight * student_gen_loss +
                 cfg.tan_weight * tan_loss +
-                cfg.dialog_weight * dialog_loss +
-                cfg.caption_weight * caption_loss
+                cfg.sim_weight * sim_loss
             )
 
             total_loss += loss.item()
-            total_sim_loss += sim_loss.item()
-            total_dialog_loss += dialog_loss.item()
-            total_caption_loss += caption_loss.item()
+            total_teacher_gen_loss += teacher_gen_loss.item()
+            total_student_gen_loss += student_gen_loss.item()
             total_tan_loss += tan_loss.item()
+            total_sim_loss += sim_loss.item()
 
             pbar.set_description(
-                '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-                    phase, epoch, 
-                    sim_loss.item(), 
+                '{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+                    'train', epoch, 
+                    teacher_gen_loss.item(),
+                    student_gen_loss.item(),
                     tan_loss.item(), 
-                    caption_loss.item(), 
-                    dialog_loss.item()
+                    sim_loss.item()
                 )
             )
             pbar.update()
             
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
-    total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
+    total_teacher_gen_loss /= len(loader)
+    total_student_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
+    total_sim_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'valid/loss': total_loss,
-                'valid/sim_loss': total_sim_loss,
+                'valid/teacher_gen_loss': total_teacher_gen_loss,
+                'valid/student_gen_loss': total_student_gen_loss,
                 'valid/tan_loss': total_tan_loss,
-                'valid/dialog_loss': total_dialog_loss,
-                'valid/caption_loss': total_caption_loss,
+                'valid/sim_loss': total_sim_loss
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        phase, epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+
+    print('{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+        'valid', epoch, 
+        total_teacher_gen_loss,
+        total_student_gen_loss,
+        total_tan_loss, 
+        total_sim_loss
     ))
 
     return total_loss

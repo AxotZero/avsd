@@ -21,7 +21,8 @@ class Generator(nn.Module):
         '''
         x = self.norm(x)
         x = self.linear(x)
-        return F.log_softmax(x, dim=-1)
+        return x
+        # return F.log_softmax(x, dim=-1)
 
 
 
@@ -43,4 +44,5 @@ class GruGenerator(nn.Module):
         '''
         x = self.gru(x)
         x = self.linear(x)
-        return F.log_softmax(x, dim=-1)
+        return x
+        # return F.log_softmax(x, dim=-1)

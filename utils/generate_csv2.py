@@ -59,7 +59,7 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
                         dialog_str += dialog[turn_idx]['answer']
                     dialog_str += ' '
                 tmp['dialog'] = dialog_str
-                # bp()
+                
                 turn = dialog[-1]
                 if phase == 'test' or ('reason' not in turn) or (len(turn['reason'])==0):
                     tmp['tan_mask'] = [0]
@@ -91,7 +91,7 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
     df2 = pd.DataFrame(d_list, dtype=object)
     df2 = df2.reindex(columns=column_names)
     df2.to_csv(output_csv, sep='\t', index=None)
-    # bp()
+    
     if phase in ('train', 'val'):
         if phase == 'train':
             debug = df2.iloc[:100]
