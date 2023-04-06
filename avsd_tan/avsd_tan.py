@@ -96,8 +96,6 @@ class AVSDTan(nn.Module):
 
         # convert to the probability of predicted word
         gen_dialog = self.generator(dialog_embs)
-        gen_dialog[:, :, self.pad_idx] = 0
-
         return gen_dialog, hidden_embs, map2d, attn_w
 
     def get_sent_indices(self, text):
@@ -132,7 +130,9 @@ class AVSDTan(nn.Module):
 class JST(nn.Module):
     def __init__(self, cfg, train_dataset):
         super().__init__()
-        self.teacher = AVSDTan(cfg, train_dataset, is_teacher=True)
+        self.jst = cfg.jst
+        if cfg.jst:
+            self.teacher = AVSDTan(cfg, train_dataset, is_teacher=True)
         self.student = AVSDTan(cfg, train_dataset, is_teacher=False)
 
         self.pad_idx = train_dataset.pad_idx
@@ -140,12 +140,12 @@ class JST(nn.Module):
         self.sent_start_idx = train_dataset.sent_start_idx
         self.sent_end_idx = train_dataset.sent_end_idx
         self.cap_idx = train_dataset.cap_idx
-        self.sum_idx = train_dataset.sum_idx
 
         # loss
         self.sim_loss = nn.MSELoss()
         self.tan_loss = TanLoss(cfg.min_iou, cfg.max_iou)
         self.gen_loss = SoftCrossEntropy(self.pad_idx, self.cls_idx, train_dataset.vocab_size)
+        # self.gen_loss = LabelSmoothing(0, self.pad_idx, self.cls_idx)
 
     def forward(self,
                 feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
@@ -162,13 +162,18 @@ class JST(nn.Module):
                 return student_gen_dialog, attn_w, map2d
             return student_gen_dialog, attn_w
         
-        teacher_gen_dialog, teacher_hidden_embs, _, _ = self.teacher(
-            feats, visual_mask, audio_mask,  dialog_x, caption_x=caption_x, map2d=None)
+        if self.jst:
+            teacher_gen_dialog, teacher_hidden_embs, _, _ = self.teacher(
+                feats, visual_mask, audio_mask,  dialog_x, caption_x=caption_x, map2d=None)
         
-        teacher_gen_loss = self.gen_loss(teacher_gen_dialog, dialog_y)
-        student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y, teacher_gen_dialog.detach())
-        # student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y)
-        sim_loss = self.sim_loss(student_hidden_embs, teacher_hidden_embs)
+            teacher_gen_loss = self.gen_loss(teacher_gen_dialog, dialog_y)
+            student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y, teacher_gen_dialog.detach())
+        
+            sim_loss = self.sim_loss(student_hidden_embs, teacher_hidden_embs)
+        else:
+            student_gen_loss = self.gen_loss(student_gen_dialog, dialog_y)
+            teacher_gen_loss = torch.tensor(0.0).to(dialog_x.get_device())
+            sim_loss = torch.tensor(0.0).to(dialog_x.get_device())
         tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
 
         return teacher_gen_loss, student_gen_loss, sim_loss, tan_loss

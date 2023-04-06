@@ -11,6 +11,8 @@ def main(cfg):
     if 'train' in cfg.procedure:
         train_cap(cfg)
     if 'test' in cfg.procedure:
+        if 'train' not in cfg.procedure:
+            cfg.wandb = False
         eval_cap(cfg)
 
 
@@ -69,7 +71,7 @@ def get_parser():
     parser.add_argument('--num_workers', type=int, default=0, help='number of num_workers')
     parser.add_argument('--one_by_one_starts_at', type=int, default=1,
                         help='# of epochs to skip before starting 1-by-1 validation (saves time)')
-    parser.add_argument('--early_stop_after', type=int, default=5,
+    parser.add_argument('--early_stop_after', type=int, default=3,
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument('--key-metric', type=str, default='Bleu_4',
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
@@ -153,6 +155,7 @@ def get_parser():
     parser.add_argument('--teacher_weight', type=float, default=1.0)
     parser.add_argument('--student_weight', type=float, default=1.0)
     parser.add_argument('--shrank', action='store_true')
+    parser.add_argument('--jst', action='store_true')
 
     
     parser.set_defaults(to_log=True)

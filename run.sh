@@ -4,12 +4,12 @@
 
 datapath=data/features
 
-exp_name=jst_detach2
+exp_name=origin
 
 ## procedure
-# procedure='train_test'
+procedure='train_test'
 # procedure='train'
-procedure='test'
+# procedure='test'
 
 ## model config
 seg_method='sample'
@@ -23,16 +23,18 @@ d_model=192
 dout_p=0.1
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
+# jst='--jst'
+jst=''
 min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='2 3'
+device_ids='4 5'
 batch_size=2 # per device
 num_workers=4
-weight_decay=0.00005
-lr=0.001
-sim_weight=5
+weight_decay=0.0002
+lr=0.0003
+sim_weight=0.5
 tan_weight=1
 teacher_weight=1
 student_weight=1
@@ -47,8 +49,6 @@ one_by_one_starts_at=100
 # decoding_method='greedy'
 # decoding_method='topk_topp'
 decoding_method='beam_search'
-topk=4
-topp=0.92
 
 ## log and debug
 # debug="--debug"
@@ -76,6 +76,7 @@ log_dir=./log
 # generate_csv=utils/generate_csv.py
 # python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
 # python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
 # python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set2 test ./data/dstc10_test2.csv
 # return
 
@@ -113,14 +114,13 @@ python main.py \
  --max_iou $max_iou \
  --lr $lr \
  --decoding_method $decoding_method \
- --topp $topp \
- --topk $topk \
  --sim_weight $sim_weight \
  --tan_weight $tan_weight \
  --teacher_weight $teacher_weight \
  --student_weight $student_weight \
  --min_freq_caps $min_freq_caps \
  --smoothing $smoothing \
+ $jst \
  $debug \
  $dont_log \
  $last_only \

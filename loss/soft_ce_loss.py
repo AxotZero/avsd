@@ -18,7 +18,7 @@ class SoftCrossEntropy(nn.Module):
             soft_target = F.one_hot(target, num_classes=self.num_vocab)
         else:
             soft_target = F.softmax(soft_target, dim=-1)
-        # bp()
+        
         target = target.view(-1)
         mask = ~((target == self.pad_idx) | (target == self.cls_idx))
         pred = pred.view(-1, self.num_vocab)[mask]

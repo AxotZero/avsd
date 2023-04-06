@@ -35,7 +35,7 @@ class VisualEncoder(nn.Module):
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*2,
+            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*4,
             dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
@@ -73,7 +73,7 @@ class AudioEncoder(nn.Module):
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*2,
+            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*4,
             dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
@@ -82,6 +82,7 @@ class AudioEncoder(nn.Module):
         )
         
     def forward(self, aud, mask=None):
+        # aud = self.norm_aud(aud)
         aud = F.normalize(aud, dim=-1)
         aud = self.pre_dropout(aud)
         aud = self.encode_aud(aud)
@@ -152,7 +153,7 @@ class BottleneckTransformer(nn.Module):
         num_tokens = 4
         num_layers = cfg.num_encoder_layers
 
-        self.token = nn.Parameter(F.normalize(torch.randn(num_tokens, d_model)))
+        self.token = nn.Parameter(F.normalize(torch.randn(num_tokens, d_model), dim=-1))
         self.encoder = nn.ModuleList([
             BottleneckTransformerLayer(cfg)
             for _ in range(num_layers)
@@ -176,7 +177,7 @@ class CrossTransformer(nn.Module):
         
         self.encoder = nn.TransformerEncoder(
             encoder_layer = nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=8, dim_feedforward=d_model*2,
+                d_model=d_model, nhead=8, dim_feedforward=d_model*4,
                 dropout=cfg.dout_p, batch_first=True
             ),
             num_layers=cfg.num_encoder_layers,
@@ -212,8 +213,6 @@ class AVEncoder(nn.Module):
             pre_dout=0.2
         )
         self.cross_encoder = BottleneckTransformer(cfg)
-        # self.visual_weight = 2
-        # self.audio_weight = 
 
     
     def forward(self, rgb, flow, aud, vis_mask=None, aud_mask=None):

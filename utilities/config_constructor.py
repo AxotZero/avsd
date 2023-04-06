@@ -131,3 +131,4 @@ class Config(object):
         self.teacher_weight = args.teacher_weight
         self.student_weight = args.student_weight
         self.shrank = args.shrank
+        self.jst = args.jst
