@@ -10,10 +10,11 @@ from model.captioning_module import BiModalTransformer, Transformer
 from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
 
+from ranger import Ranger
 import wandb
 
 def train_cap(cfg):
-    if cfg.to_log:
+    if cfg.wandb:
         wandb.init(
             project='avsd', 
             name=cfg.exp_name,
@@ -43,7 +44,7 @@ def train_cap(cfg):
     train_pkl = load_pickle(f'{cfg.feature_dir}/train{"_debug" if cfg.debug else ""}.pkl')
     train_dataset = AVSD10Dataset(cfg, 'train', train_pkl, get_full_feat=False)
     val_dataset = AVSD10Dataset(cfg, 'val', train_pkl, get_full_feat=False)
-    train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate, pin_memory=True)
+    train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate)
     val_loader = DataLoader(val_dataset, num_workers=cfg.num_workers, collate_fn=val_dataset.dont_collate)
 
     if cfg.pretrained_cap_model_path is not None:
@@ -60,12 +61,13 @@ def train_cap(cfg):
 
     criterion = LabelSmoothing(cfg.smoothing, train_dataset.pad_idx)
     
-    if cfg.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
-                                     weight_decay=cfg.weight_decay)
-    elif cfg.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(model.parameters(), cfg.lr, cfg.momentum,
-                                    weight_decay=cfg.weight_decay)
+    # if cfg.optimizer == 'adam':
+    #     optimizer = torch.optim.Adam(model.parameters(), cfg.lr, (cfg.beta1, cfg.beta2), cfg.eps,
+    #                                  weight_decay=cfg.weight_decay)
+    # elif cfg.optimizer == 'sgd':
+    #     optimizer = torch.optim.SGD(model.parameters(), cfg.lr, cfg.momentum,
+    #                                 weight_decay=cfg.weight_decay)
+    optimizer = Ranger(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     
     if cfg.scheduler == 'reduce_on_plateau':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -83,7 +85,7 @@ def train_cap(cfg):
         model.load_state_dict(cap_model_cpt['model_state_dict'])
 
     # keeping track of the best model 
-    best_metric = 0
+    best_metric = float('inf')
     # "early stopping" thing
     num_epoch_best_metric_unchanged = 0
     best_epoch = 0
@@ -101,39 +103,25 @@ def train_cap(cfg):
         training_loop(cfg, model, train_loader, criterion, optimizer, epoch)
         # validation (next word)
         val_loss = validation_next_word_loop(
-            cfg, model, val_loader, greedy_decoder, criterion, epoch
+            cfg, model, val_loader, criterion, epoch
         )
         if scheduler is not None:
             scheduler.step(val_loss)
 
+        if val_loss < best_metric:
+            best_metric = val_loss
+            save_model(cfg, epoch, model, optimizer, val_loss,
+                        None, train_dataset.vocab_size)
+            # reset the early stopping criterion
+            num_epoch_best_metric_unchanged = 0
+            best_epoch = epoch
+        else:
+            num_epoch_best_metric_unchanged += 1
+        
+
         # validation (1-by-1 word)
-        if epoch >= cfg.one_by_one_starts_at:
-            val_metrics, duration = validation_1by1_loop(
-                cfg, model, val_loader, teacher_forced_decoder, epoch)
-            if cfg.to_log:
-                for metric, score in val_metrics.items():
-                    wandb.log({f'val/{metric}': score * 100})
-                
-            # saving the model if it is better than the best so far
-            if best_metric < val_metrics[cfg.key_metric]:
-                best_metric = val_metrics[cfg.key_metric]
-                save_model(cfg, epoch, model, optimizer, val_loss,
-                               val_metrics, train_dataset.trg_voc_size)
-                # reset the early stopping criterion
-                num_epoch_best_metric_unchanged = 0
-                best_epoch = epoch
-            else:
-                num_epoch_best_metric_unchanged += 1
-            # Output the results
-            print(f'Validation scores at epoch {epoch}',
-                  f'(best {cfg.key_metric}: %2.4f)' % (best_metric * 100)
-                  if epoch==best_epoch else '')
-            print('-' * 25)
-            for metric, score in val_metrics.items():
-                print('| %s: %2.4f' % (metric, 100 * score))
-            print('-' * 25)
-            print('duration_of_1by1:', duration / 60, epoch)
-            sys.stdout.flush()
+        if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
+            break
 
     print(f'{cfg.curr_time}')
-    print(f'best {cfg.key_metric}: %2.4f at epoch {best_epoch}' % (best_metric * 100))
+    print(f'best val_loss: %2.4f at epoch {best_epoch}' % (best_metric * 100))

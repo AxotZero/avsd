@@ -10,7 +10,7 @@ def generate_csv(duration_file,inp_json,phase,output_csv):
     f=open(inp_json,'r')
     d1=json.loads(f.read())
 
-    column_names=['video_id','caption','start','end','duration', 'seq_start', 'seq_end', 'phase','idx']
+    column_names=['video_id','caption','start','end','duration', 'phase','idx']
     df2=pd.DataFrame(columns = column_names, dtype=object)
     ld={item1['image_id'] : item1 for item1 in d1['dialogs']}
     d_list=[]
@@ -29,13 +29,6 @@ def generate_csv(duration_file,inp_json,phase,output_csv):
                                   + ' A: ' + (item_ins['answer'][0] if type(item_ins['answer'])==list
                                               else item_ins['answer'])
                                     for item_ins in item1['dialog']])
-            if phase in ('train', 'val'):
-                d['seq_start'] = [d['reason'][0]['timestamp'][0] if len(d['reason']) > 0 else 0 for d in item1['dialog']]
-                d['seq_end'] = [d['reason'][0]['timestamp'][1] if len(d['reason']) > 0 else 0 for d in item1['dialog']]
-            else:
-                d['seq_start'] = 0
-                d['seq_end'] = 0
-
 
             d['phase'] = phase
             d_list.append(d)
@@ -44,7 +37,16 @@ def generate_csv(duration_file,inp_json,phase,output_csv):
     df2 = pd.DataFrame(d_list)
     df2 = df2.reindex(columns=column_names)
     df2.to_csv(output_csv,sep='\t',index=None)
+
+
+    if phase in ('train', 'val'):
+        if phase == 'train':
+            debug = df2.iloc[:100]
+        else:
+            debug = df2.iloc[:20]
+        debug.to_csv(output_csv[:-4]+'_debug.csv', sep='\t', index=None)
     #pdb.set_trace()
 
 if __name__=="__main__":
+    # print(sys.argv)
     generate_csv(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4])

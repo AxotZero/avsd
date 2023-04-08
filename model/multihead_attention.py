@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def attention(Q, K, V, mask, dropout=None, get_attw=False):
+def attention(Q, K, V, mask, dropout=None):
     # Q, K, V are (B, *(H), seq_len, d_model//H = d_k)
     # mask is     (B,    1,       1,               Ss)
     d_k = Q.size(-1)
@@ -23,15 +23,12 @@ def attention(Q, K, V, mask, dropout=None, get_attw=False):
         out = dropout(out)
 
     # (B, *(H), seq_len, d_model//H = d_k)
-    if get_attw:
-        return out, softmax.detach()
-    else:
-        return out
+    return out
 
 
 class MultiheadedAttention(nn.Module):
 
-    def __init__(self, d_model_Q, d_model_K, d_model_V, H, dout_p=0.0, d_model=None, keep_attw=False):
+    def __init__(self, d_model_Q, d_model_K, d_model_V, H, dout_p=0.0, d_model=None):
         super(MultiheadedAttention, self).__init__()
         self.d_model_Q = d_model_Q
         self.d_model_K = d_model_K
@@ -52,8 +49,6 @@ class MultiheadedAttention(nn.Module):
         self.linear_d2Q = nn.Linear(self.d_model, self.d_model_Q)
 
         self.dropout = nn.Dropout(self.dout_p)
-        self.keep_attw = keep_attw
-        self.attw = None
         assert self.d_model % H == 0
 
     def forward(self, Q, K, V, mask):
@@ -81,10 +76,7 @@ class MultiheadedAttention(nn.Module):
             mask = mask.unsqueeze(1)
 
         # (B, H, Sq, d_k) <- (B, H, Sq, d_k), (B, H, Sk, d_k), (B, H, Sv, d_k), Sk = Sv
-        if self.keep_attw:
-            Q, self.attw = attention(Q, K, V, mask, self.dropout, get_attw=True)
-        else:
-            Q = attention(Q, K, V, mask, self.dropout)
+        Q = attention(Q, K, V, mask, self.dropout)
         # (B, Sq, D) <- (B, H, Sq, d_k)
         Q = Q.transpose(-3, -2).contiguous().view(B, Sq, self.d_model)
         # (B, Sq, Dq)

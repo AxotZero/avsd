@@ -14,7 +14,7 @@ class Config(object):
         self.curr_time = strftime('%y%m%d%H%M%S', localtime())
         self.exp_name = args.exp_name
 
-        self.debug = args.debug
+        
 
         self.procedure = args.procedure
         # dataset
@@ -110,3 +110,12 @@ class Config(object):
         else:
             self.log_dir = None
             self.log_path = None
+
+        self.debug = args.debug
+        if self.debug:
+            self.epoch_num = 1
+            self.num_workers = 2
+            
+        self.wandb = args.wandb
+        self.decoder = args.decoder
+            

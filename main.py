@@ -5,11 +5,15 @@ from utilities.config_constructor import Config
 from scripts.train_captioning_module import train_cap
 from scripts.eval_captioning_module import eval_cap
 
+from pdb import set_trace as bp
+
 
 def main(cfg):
     if 'train' in cfg.procedure:
         train_cap(cfg)
     if 'test' in cfg.procedure:
+        if 'train' not in cfg.procedure:
+            cfg.wandb = False
         eval_cap(cfg)
 
 
@@ -68,7 +72,7 @@ def get_parser():
     parser.add_argument('--num_workers', type=int, default=0, help='number of num_workers')
     parser.add_argument('--one_by_one_starts_at', type=int, default=1,
                         help='# of epochs to skip before starting 1-by-1 validation (saves time)')
-    parser.add_argument('--early_stop_after', type=int, default=30,
+    parser.add_argument('--early_stop_after', type=int, default=5,
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument('--key-metric', type=str, default='Bleu_4',
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
@@ -132,7 +136,9 @@ def get_parser():
                         help='runs test() instead of main()')
     parser.add_argument('--dont_log', dest='to_log', action='store_false',
                         help='Prevent logging in the experiment.')
+    parser.add_argument('--wandb', dest='wandb', action='store_true')
     parser.add_argument('--feature_dir', type=str, default='./data/features/')
+    parser.add_argument('--decoder', type=str, default='greedy_decoder')
 
     parser.set_defaults(to_log=True)
     return parser

@@ -34,12 +34,11 @@ class Transformer(nn.Module):
             assert self.d_feat == self.d_model
             self.src_emb = Identity()
             
-        self.trg_emb = VocabularyEmbedder(train_dataset.trg_voc_size, self.d_model)
+        self.trg_emb = VocabularyEmbedder(train_dataset.vocab_size, self.d_model)
         self.pos_emb = PositionalEncoder(self.d_model, cfg.dout_p)
         self.encoder = Encoder(self.d_model, cfg.dout_p, cfg.H, self.d_ff, cfg.N)
-        self.decoder = Decoder(self.d_model, cfg.dout_p, cfg.H, self.d_ff, cfg.N, keep_enc_attw = True)
-        self.generator = Generator(self.d_model, train_dataset.trg_voc_size)
-        self.keep_enc_attw = True
+        self.decoder = Decoder(self.d_model, cfg.dout_p, cfg.H, self.d_ff, cfg.N)
+        self.generator = Generator(self.d_model, train_dataset.vocab_size)
 
         print('initialization: xavier')
         for p in self.parameters():
@@ -77,15 +76,6 @@ class Transformer(nn.Module):
         
         return out
 
-    def enc_attw(self):
-        if self.keep_enc_attw:
-            # returns source attention weights averaged over multiple heads of the first layer
-            layer = self.decoder.decoder.layers[0]
-            return torch.mean(layer.enc_att.attw, dim=1)
-        else:
-            return []
-
-
 class BiModalTransformer(nn.Module):
     '''
     Forward:
@@ -106,7 +96,7 @@ class BiModalTransformer(nn.Module):
             self.emb_A = Identity()
             self.emb_V = Identity()
 
-        self.emb_C = VocabularyEmbedder(train_dataset.trg_voc_size, cfg.d_model_caps)
+        self.emb_C = VocabularyEmbedder(train_dataset.vocab_size, cfg.d_model_caps)
         
         self.pos_enc_A = PositionalEncoder(cfg.d_model_audio, cfg.dout_p)
         self.pos_enc_V = PositionalEncoder(cfg.d_model_video, cfg.dout_p)
@@ -119,11 +109,10 @@ class BiModalTransformer(nn.Module):
         
         self.decoder = BiModelDecoder(
             cfg.d_model_audio, cfg.d_model_video, cfg.d_model_caps, cfg.d_model, cfg.dout_p, 
-            cfg.H, cfg.d_ff_caps, cfg.N, keep_enc_attw=True
+            cfg.H, cfg.d_ff_caps, 6
         )
-        self.keep_enc_attw = True
 
-        self.generator = Generator(cfg.d_model_caps, train_dataset.trg_voc_size)
+        self.generator = Generator(cfg.d_model_caps, train_dataset.vocab_size)
 
         print('initialization: xavier')
         for p in self.parameters():
@@ -133,8 +122,8 @@ class BiModalTransformer(nn.Module):
         # of the prev. initialization
         self.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
 
-    def forward(self, src: dict, trg, masks: dict, return_attw=False):
-        V, A = src['rgb'] + src['flow'], src['audio']
+    def forward(self, src: dict, trg, masks: dict):
+        V, A = torch.cat([src['rgb'], src['flow']], dim=-1), src['audio']
         C = trg
 
         # (B, Sm, Dm) <- (B, Sm, Dm), m in [a, v]; 
@@ -156,15 +145,4 @@ class BiModalTransformer(nn.Module):
         # (B, Sc, Vc) <- (B, Sc, Dc) 
         C = self.generator(C)
 
-        if not return_attw:
-            return C
-        else:
-            return C, self.enc_attw()
-
-    def enc_attw(self):
-        if self.keep_enc_attw:
-            # returns source attention weights averaged over multiple heads of the first layer
-            layer = self.decoder.decoder.layers[0]
-            return torch.mean(layer.enc_att_V.attw, dim=1)
-        else:
-            return []
+        return C

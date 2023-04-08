@@ -8,11 +8,11 @@ from model.multihead_attention import MultiheadedAttention
 
 class DecoderLayer(nn.Module):
 
-    def __init__(self, d_model, dout_p, H, d_ff, keep_enc_attw=False):
+    def __init__(self, d_model, dout_p, H, d_ff):
         super(DecoderLayer, self).__init__()
         self.res_layers = clone(ResidualConnection(d_model, dout_p), 3)
         self.self_att = MultiheadedAttention(d_model, d_model, d_model, H)
-        self.enc_att = MultiheadedAttention(d_model, d_model, d_model, H, keep_attw=keep_enc_attw)
+        self.enc_att = MultiheadedAttention(d_model, d_model, d_model, H)
         self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dout_p=0.0)
 
     def forward(self, x, memory, src_mask, trg_mask):
@@ -36,7 +36,7 @@ class DecoderLayer(nn.Module):
 
 class BiModalDecoderLayer(nn.Module):
 
-    def __init__(self, d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C, keep_enc_attw=False):
+    def __init__(self, d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C):
         super(BiModalDecoderLayer, self).__init__()
         # self attention
         self.res_layer_self_att = ResidualConnection(d_model_C, dout_p)
@@ -44,8 +44,8 @@ class BiModalDecoderLayer(nn.Module):
         # encoder attention
         self.res_layer_enc_att_A = ResidualConnection(d_model_C, dout_p)
         self.res_layer_enc_att_V = ResidualConnection(d_model_C, dout_p)
-        self.enc_att_A = MultiheadedAttention(d_model_C, d_model_A, d_model_A, H, dout_p, d_model, keep_attw=keep_enc_attw)
-        self.enc_att_V = MultiheadedAttention(d_model_C, d_model_V, d_model_V, H, dout_p, d_model, keep_attw=keep_enc_attw)
+        self.enc_att_A = MultiheadedAttention(d_model_C, d_model_A, d_model_A, H, dout_p, d_model)
+        self.enc_att_V = MultiheadedAttention(d_model_C, d_model_V, d_model_V, H, dout_p, d_model)
         # bridge
         self.bridge = BridgeConnection(2*d_model_C, d_model_C, dout_p)
         # feed forward residual
@@ -94,9 +94,9 @@ class BiModalDecoderLayer(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, d_model, dout_p, H, d_ff, N, keep_enc_attw=False):
+    def __init__(self, d_model, dout_p, H, d_ff, N):
         super(Decoder, self).__init__()
-        self.dec_layers = clone(DecoderLayer(d_model, dout_p, H, d_ff, keep_enc_attw=keep_enc_attw), N)
+        self.dec_layers = clone(DecoderLayer(d_model, dout_p, H, d_ff), N)
 
     def forward(self, x, memory, src_mask, trg_mask):
         '''
@@ -113,10 +113,10 @@ class Decoder(nn.Module):
 
 class BiModelDecoder(nn.Module):
 
-    def __init__(self, d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C, N, keep_enc_attw=False):
+    def __init__(self, d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C, N):
         super(BiModelDecoder, self).__init__()
         layer = BiModalDecoderLayer(
-            d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C, keep_enc_attw=keep_enc_attw
+            d_model_A, d_model_V, d_model_C, d_model, dout_p, H, d_ff_C
         )
         self.decoder = LayerStack(layer, N)
 

@@ -27,8 +27,6 @@ def caption_iterator(cfg, batch_size, phase):
         ('start', None),
         ('end', None),
         ('duration', None),
-        ('seq_start', None),
-        ('seq_end', None),
         ('phase', None),
         ('idx', INDEX),
     ]
@@ -87,7 +85,7 @@ class I3DFeaturesDataset(Dataset):
 
         for idx in indices:
             idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+            video_id, caption, start, end, duration, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.cfg, self.feature_names_list, video_id, start, end, duration, 
@@ -156,7 +154,7 @@ class VGGishFeaturesDataset(Dataset):
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+            video_id, caption, start, end, duration, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.cfg, self.feature_names_list, video_id, start, end, duration,
@@ -221,7 +219,7 @@ class AudioVideoFeaturesDataset(Dataset):
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, start, end, duration, seq_start, seq_end, _, _ = self.dataset.iloc[idx]
+            video_id, caption, start, end, duration, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.feature_pkl, self.cfg, 
@@ -320,7 +318,7 @@ class AVSD10Dataset(Dataset):
         # caption dataset *iterator*
         self.train_vocab, self.caption_loader = caption_iterator(cfg, self.batch_size, self.phase)
         
-        self.trg_voc_size = len(self.train_vocab)
+        self.vocab_size = len(self.train_vocab)
         self.pad_idx = self.train_vocab.stoi[cfg.pad_token]
         self.start_idx = self.train_vocab.stoi[cfg.start_token]
         self.end_idx = self.train_vocab.stoi[cfg.end_token]

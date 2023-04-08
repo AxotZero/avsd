@@ -9,11 +9,23 @@ from utilities.captioning_utils import timer
 from datasets.load_features import load_pickle
 import wandb
 
-def eval_cap(cfg):
+
+def eval_cap_helper(cfg, test_pkl, dstc=7):
+    if dstc == 7:
+        cfg.reference_paths = ['./data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
+        cfg.test_meta_path = './data/dstc10_test2.csv'
+    else:
+        cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
+        cfg.test_meta_path = './data/dstc10_test.csv'
+
     cfg.last_only=True
     cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
-    cfg.reference_paths = ['./dstc10avsd_eval/data/test_set4DSTC10-AVSD_multiref+reason.json']
+    
     cfg.unfreeze_word_emb = False
+    cfg.inference_batch_size = 1
+    cfg.device_ids = [cfg.device_ids[0]]
+    cfg.num_workers = 0
+
     # cfg.inference_batch_size = cfg.train_batch_size // len(cfg.device_ids) * 2
     # cfg.device_ids = [cfg.device_ids[-1]]
 
@@ -24,16 +36,15 @@ def eval_cap(cfg):
     torch.backends.cudnn.benchmark = False
     torch.cuda.set_device(cfg.device_ids[0])
 
-    test_pkl = load_pickle(f'{cfg.feature_dir}/test.pkl')
+    
     test_dataset = AVSD10Dataset(cfg, 'test', test_pkl, get_full_feat=False)
     test_loader = DataLoader(test_dataset, collate_fn=test_dataset.dont_collate)
 
     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
     model_cfg = cap_model_cpt['config']
-    if cfg.modality == 'audio_video':
-        model = BiModalTransformer(model_cfg, test_dataset)
-    elif cfg.modality in ['video', 'audio']:
-        model = Transformer(model_cfg, test_dataset)
+    # setattr(model_cfg, 'jst', True)
+    model = BiModalTransformer(model_cfg, test_dataset)
+    
 
     model.to(torch.device(cfg.device))
     model = torch.nn.DataParallel(model, cfg.device_ids)
@@ -43,14 +54,20 @@ def eval_cap(cfg):
 
     # evaluation (1-by-1 word)
     metrics, duration = validation_1by1_loop(
-        cfg, model, test_loader, teacher_forced_decoder, 0
+        cfg, model, test_loader, 0
     )
+
     print ('-' * 25)
+    print(f'DSTC{dstc} result:')
     for metric, score in metrics.items():
         print ('| %s: %2.4f' % (metric, 100 * score))
     print ('-' * 25)
 
-    if cfg.to_log:
-        for metric, score in metrics.items():
-            wandb.log({f'test/{metric}': score * 100})
-                
+    if cfg.wandb:
+        wandb.log({f'test{dstc}/{metric}': score * 100 for metric, score in metrics.items()})
+
+
+def eval_cap(cfg):
+    test_pkl = load_pickle(f'{cfg.feature_dir}/test.pkl')
+    eval_cap_helper(cfg, test_pkl, dstc=7)
+    eval_cap_helper(cfg, test_pkl, dstc=10)
