@@ -7,8 +7,11 @@ import torch.nn.functional as F
 
 import numpy as np
 
-from model.blocks import (BridgeConnection, PositionwiseFeedForward, PositionalEncoder)
+from model.blocks import (BridgeConnection, PositionwiseFeedForward, PositionalEncoder, Mish)
 from .utils import get_seg_feats
+
+
+
 
 
 def build_mlp(dims, dout_p):
@@ -28,15 +31,13 @@ class VisualEncoder(nn.Module):
         self.pre_dropout = nn.Dropout(pre_dout)
         self.encode_rgb = build_mlp(dims, dout_p)
         self.encode_flow = build_mlp(dims, dout_p)
-        self.combine_rgb_flow = nn.Sequential(
-            nn.Linear(hidden_dim*2, hidden_dim), 
-            nn.ReLU()
-        )
+        self.combine_rgb_flow = nn.Linear(hidden_dim*2, hidden_dim)
+
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*2,
-            dropout=cfg.dout_p, batch_first=True
+            norm_first=True, dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
             encoder_layer=attn_layer,
@@ -74,7 +75,7 @@ class AudioEncoder(nn.Module):
 
         attn_layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*2,
-            dropout=cfg.dout_p, batch_first=True
+            norm_first=True, dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
             encoder_layer=attn_layer,
@@ -201,7 +202,7 @@ class AVEncoder(nn.Module):
         self.seg_method = cfg.seg_method
         self.visual_encoder = VisualEncoder(
             cfg, 
-            dims=[2048, 512, cfg.d_model],
+            dims=[2048, cfg.d_model],
             dout_p=cfg.dout_p,
             pre_dout=0.5
         )
@@ -212,8 +213,6 @@ class AVEncoder(nn.Module):
             pre_dout=0.2
         )
         self.cross_encoder = BottleneckTransformer(cfg)
-        self.visual_weight = 2
-        self.audio_weight = 0.5
 
     
     def forward(self, rgb, flow, aud, vis_mask=None, aud_mask=None):
@@ -222,8 +221,8 @@ class AVEncoder(nn.Module):
 
         v, a = self.cross_encoder(v, a, a_mask=vis_mask, b_mask=aud_mask)
 
-        v = get_seg_feats(v, self.num_seg, vis_mask, method=self.seg_method) * self.visual_weight
-        a = get_seg_feats(a, self.num_seg, aud_mask, method=self.seg_method) * self.audio_weight
+        v = get_seg_feats(v, self.num_seg, vis_mask, method=self.seg_method)
+        a = get_seg_feats(a, self.num_seg, aud_mask, method=self.seg_method)
         return v, a
 
 

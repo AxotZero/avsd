@@ -39,6 +39,8 @@ class CrossAttention(nn.Module):
         super().__init__()
 
         self.num_head = cfg.num_head
+        self.d_k = cfg.d_model // self.num_head
+        self.scale = np.sqrt(self.d_k)
         self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
@@ -62,14 +64,13 @@ class CrossAttention(nn.Module):
         
         bs, num_sen, num_valid, d_model = av_feat.size()
         num_word = text.size()[1]
-        d_k = d_model // self.num_head
 
         text = self.text_norm(text)
         av_feat = self.av_norm(av_feat)
         
-        q = self.to_q(text).view(bs, num_word, 1, self.num_head, d_k)
-        k = self.to_k(av_feat).view(bs, num_sen, num_valid, self.num_head, d_k)
-        v = self.to_v(av_feat).view(bs, num_sen, num_valid, self.num_head, d_k)
+        q = self.to_q(text).view(bs, num_word, 1, self.num_head, self.d_k)
+        k = self.to_k(av_feat).view(bs, num_sen, num_valid, self.num_head, self.d_k)
+        v = self.to_v(av_feat).view(bs, num_sen, num_valid, self.num_head, self.d_k)
         
         ## only attn to given attn_sent_index av_feat 
         # for k and v, get the corresponding feature map of each word for text
@@ -78,15 +79,15 @@ class CrossAttention(nn.Module):
         v = v[[batch_indices, attn_sent_index]] # bs, num_word, num_valid, num_head, d_k
 
         attn = (q*k).sum(-1, keepdim=True)
-        attn = attn / np.sqrt(d_k) # bs, num_word, num_valid, num_head, 1
-        attn = F.sigmoid(attn)
-        # attn = F.softmax(attn, dim=-3)
+        attn = attn / self.scale # bs, num_word, num_valid, num_head, 1
+        ret_attn = F.sigmoid(attn)
 
         # model output
+        attn = ret_attn / ret_attn.sum(dim=-3, keepdim=True)
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
         
-        return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
+        return out, ret_attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
 
 
 class CrossDecoderLayer(nn.Module):
@@ -100,13 +101,9 @@ class CrossDecoderLayer(nn.Module):
         self.res1 = ResidualConnection(cfg.d_model, cfg.dout_p)
 
         # cross attn
-        # self.av_weight = nn.Parameter(torch.Tensor([1.]))
-        self.av_weight = 1
         self.cross_attn = CrossAttention(cfg)
         self.dropout = nn.Dropout(cfg.dout_p)
-        self.norm1 = nn.LayerNorm(cfg.d_model)
-        self.norm2 = nn.LayerNorm(cfg.d_model)
-
+        self.norm = nn.LayerNorm(cfg.d_model)
 
         # ff
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
@@ -128,7 +125,7 @@ class CrossDecoderLayer(nn.Module):
 
         # cross_attn + res
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        text = self.norm1(text) + self.dropout(self.norm2(res) * self.av_weight)
+        text = self.norm(text + self.dropout(res))
 
         # ff + res
         text = self.res2(text, self.ff)

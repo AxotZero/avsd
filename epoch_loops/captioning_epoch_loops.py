@@ -269,6 +269,7 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
             batch_indices = torch.arange(B, dtype=torch.long, device=device)
             map2d = None
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
+                # bp()
                 if out.size(-1) > 1 and map2d.size(0) == 1:
                     generate_beam = lambda x: x.repeat(beam_size, *([1] * (len(x.size()) - 1)))
                     map2d = generate_beam(map2d)

@@ -41,7 +41,7 @@ class AVSDTan(nn.Module):
         self.cross_decoder = CrossDecoder(cfg)
 
         self.generator = Generator(cfg.d_model, vocab_size)
-        # self.generator = GruGenerator(cfg, voc_size=train_dataset.vocab_size)
+        # self.generator = GruGenerator(cfg, vocab_size)
 
 
         self.sim_loss = ContrasitiveLoss()
@@ -86,17 +86,17 @@ class AVSDTan(nn.Module):
         rgb, flow, audio = feats['rgb'], feats['flow'], feats['audio']
         bs = rgb.size(0)
 
-        if caption_x is not None:
-            pad_mask, text_mask = self.get_mask(caption_x)
-            embs, caption_emb = self.uni_decoder(caption_x, text_mask, get_caption_emb=True)
-            cap_map2d, video_emb = self.embed_map2d(rgb, flow, audio, None, visual_mask, audio_mask)            
-            sent_indices = self.get_sent_indices(caption_x)
-            embs, _ = self.cross_decoder(embs, 
-                                         cap_map2d, 
-                                         pad_mask, 
-                                         text_mask,
-                                         sent_indices)
-            gen_caption = self.generator(embs)
+        # if caption_x is not None:
+        #     pad_mask, text_mask = self.get_mask(caption_x)
+        #     embs, caption_emb = self.uni_decoder(caption_x, text_mask, get_caption_emb=True)
+        #     cap_map2d, video_emb = self.embed_map2d(rgb, flow, audio, None, visual_mask, audio_mask)            
+        #     sent_indices = self.get_sent_indices(caption_x)
+        #     embs, _ = self.cross_decoder(embs, 
+        #                                  cap_map2d, 
+        #                                  pad_mask, 
+        #                                  text_mask,
+        #                                  sent_indices)
+        #     gen_caption = self.generator(embs)
         
 
         if dialog_x is not None:
@@ -118,10 +118,12 @@ class AVSDTan(nn.Module):
 
         ### write loss func
         if compute_loss:
-            sim_loss = self.sim_loss(video_emb, caption_emb)
+            # sim_loss = self.sim_loss(video_emb, caption_emb)
             tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
             dialog_loss = self.gen_loss(gen_dialog, dialog_y)
-            caption_loss = self.gen_loss(gen_caption, caption_y)
+            # caption_loss = self.gen_loss(gen_caption, caption_y)
+            caption_loss = torch.tensor(0.0).to(dialog_loss.get_device())
+            sim_loss = torch.tensor(0.0).to(dialog_loss.get_device())
             return sim_loss, tan_loss, dialog_loss, caption_loss
             # return None, None, dialog_loss, caption_loss
 

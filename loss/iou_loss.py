@@ -56,4 +56,7 @@ class TanLoss(object):
 
         ious = self.scale(ious).clamp(0, 1)
 
-        return F.binary_cross_entropy(scores.float(), ious.float())
+        loss =  F.binary_cross_entropy(scores.float(), ious.float())
+        if torch.isnan(loss):
+            return torch.tensor(0.0).to(loss.device)
+        return loss
