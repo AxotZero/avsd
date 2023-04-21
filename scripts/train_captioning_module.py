@@ -39,10 +39,10 @@ def train_cap(cfg):
         )
     # torch.multiprocessing.set_sharing_strategy('file_system')
     # doing our best to make it replicable
-    torch.manual_seed(0)
-    np.random.seed(0)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # torch.manual_seed(0)
+    # np.random.seed(0)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
     # preventing PyTorch from allocating memory on the default device (cuda:0) when the desired 
     # cuda id for training is not 0.
     torch.cuda.set_device(cfg.device_ids[0])
@@ -54,12 +54,12 @@ def train_cap(cfg):
     train_loader = DataLoader(train_dataset, num_workers=cfg.num_workers, collate_fn=train_dataset.dont_collate)
     val_loader = DataLoader(val_dataset, num_workers=0, collate_fn=val_dataset.dont_collate)
 
-    if cfg.pretrained_cap_model_path is not None:
-        cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
-        model_cfg = cap_model_cpt['config']
-    else:
-        cap_model_cpt = None
-        model_cfg = cfg
+    # if cfg.pretrained_cap_model_path is not None:
+    #     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
+    #     model_cfg = cap_model_cpt['config']
+    # else:
+    #     cap_model_cpt = None
+    #     model_cfg = cfg
 
     # if cfg.modality == 'audio_video':
     #     model = BiModalTransformer(model_cfg, train_dataset)
@@ -81,8 +81,8 @@ def train_cap(cfg):
     param_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Total Number of Trainable Parameters: {param_num / 1000000} Mil.')
 
-    if cap_model_cpt is not None:
-        model.load_state_dict(cap_model_cpt['model_state_dict'])
+    # if cap_model_cpt is not None:
+    #     model.load_state_dict(cap_model_cpt['model_state_dict'])
 
     # keeping track of the best model 
     best_metric = float('inf')
@@ -90,38 +90,41 @@ def train_cap(cfg):
     num_epoch_best_metric_unchanged = 0
     best_epoch = -1
 
-    for epoch in range(cfg.epoch_num):
-        print(f'The best metric was  for {num_epoch_best_metric_unchanged} epochs.')
-        print(f'Expected early stop @ {epoch+cfg.early_stop_after-num_epoch_best_metric_unchanged}')
-        print(f'Started @ {cfg.curr_time}; Current timer: {timer(cfg.curr_time)}')
-        
-        # stop training if metric hasn't been changed for cfg.early_stop_after epochs
-        # if num_epoch_best_metric_unchanged == cfg.early_stop_after:
-        #     break
+    try:
+        for epoch in range(cfg.epoch_num):
+            print(f'The best metric was  for {num_epoch_best_metric_unchanged} epochs.')
+            print(f'Expected early stop @ {epoch+cfg.early_stop_after-num_epoch_best_metric_unchanged}')
+            print(f'Started @ {cfg.curr_time}; Current timer: {timer(cfg.curr_time)}')
+            
+            # stop training if metric hasn't been changed for cfg.early_stop_after epochs
+            # if num_epoch_best_metric_unchanged == cfg.early_stop_after:
+            #     break
 
-        # train
-        training_loop(cfg, model, train_loader, optimizer, epoch)
-        val_loss = validation_next_word_loop(
-            cfg, model, val_loader, epoch
-        )
-        if scheduler is not None:
-            scheduler.step(val_loss)
+            # train
+            training_loop(cfg, model, train_loader, optimizer, epoch)
+            val_loss = validation_next_word_loop(
+                cfg, model, val_loader, epoch
+            )
+            if scheduler is not None:
+                scheduler.step(val_loss)
 
-        # save_model
-        if val_loss < best_metric:
-            best_metric = val_loss
-            save_model(cfg, epoch, model, optimizer, val_loss,
-                        None, train_dataset.vocab_size)
-            # reset the early stopping criterion
-            num_epoch_best_metric_unchanged = 0
-            best_epoch = epoch
-        else:
-            num_epoch_best_metric_unchanged += 1
-        
+            # save_model
+            if val_loss < best_metric:
+                best_metric = val_loss
+                save_model(cfg, epoch, model, optimizer, val_loss,
+                            None, train_dataset.vocab_size)
+                # reset the early stopping criterion
+                num_epoch_best_metric_unchanged = 0
+                best_epoch = epoch
+            else:
+                num_epoch_best_metric_unchanged += 1
+            
 
-        # validation (1-by-1 word)
-        if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
-            break
+            # validation (1-by-1 word)
+            if epoch >= cfg.one_by_one_starts_at or (num_epoch_best_metric_unchanged == cfg.early_stop_after):
+                break
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt, run test')
 
     print(f'{cfg.curr_time}')
     print(f'best val_loss: %2.4f at epoch {best_epoch}' % (best_metric * 100))

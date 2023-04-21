@@ -80,7 +80,7 @@ def caption_iterator(cfg, batch_size, phase):
     datasetloader = data.BucketIterator(dataset, batch_size, sort_key=lambda x: 0, 
                                         # device=torch.device(cfg.device), 
                                         device=None,
-                                        repeat=False, shuffle=True)
+                                        repeat=False, shuffle= (phase=='train'))
     return train_vocab, datasetloader
 
 
@@ -212,7 +212,7 @@ class AudioVideoFeaturesDataset(Dataset):
             else:
                 seq_starts = [[-1]]
                 seq_ends = [[-1]]
-                tan_mask = [-1]
+                tan_mask = [0]
 
             sents_iou_target = []
 
@@ -222,8 +222,8 @@ class AudioVideoFeaturesDataset(Dataset):
                     # get max iou of given valid_position
                     max_iou_of_vp = 0
                     for s, e in zip(seq_start, seq_end):
-                        s = s / duration
-                        e = e / duration
+                        s = max(0, s) / duration
+                        e = min(e, duration) / duration
                         iou = compute_iou((s, e), (vs, ve))
                         max_iou_of_vp = max(max_iou_of_vp, iou)
                     ious_target.append(max_iou_of_vp)

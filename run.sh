@@ -4,7 +4,7 @@
 
 datapath=data/features
 
-exp_name=origin
+exp_name=fix_conflict
 
 ## procedure
 procedure='train_test'
@@ -23,21 +23,21 @@ d_model=192
 dout_p=0.1
 no_sen_fusion='--no_sen_fusion'
 # no_sen_fusion=''
-# jst='--jst'
-jst=''
+jst='--jst'
+# jst=''
 min_iou=0.5
 max_iou=1.0
 
 ## training 
-device_ids='4 5'
-batch_size=2 # per device
-num_workers=4
+device_ids='3 4'
+batch_size=5 # per device
+num_workers=2
 weight_decay=0.0002
 lr=0.0003
 sim_weight=0.5
 tan_weight=1
-teacher_weight=1
-student_weight=1
+teacher_weight=0.5
+student_weight=0.5
 min_freq_caps=2
 smoothing=0
 # shrank='--shrank'
@@ -51,12 +51,12 @@ one_by_one_starts_at=100
 decoding_method='beam_search'
 
 ## log and debug
-# debug="--debug"
-# dont_log="--dont_log"
-# wandb=""
-debug=""
-dont_log=""
-wandb="--wandb"
+debug="--debug"
+dont_log="--dont_log"
+wandb=""
+# debug=""
+# dont_log=""
+# wandb="--wandb"
 
 last_only="--last_only"
 
@@ -73,11 +73,12 @@ log_dir=./log
 # fi
 # convert data
 # echo "Coverting json files to csv for the tool"
-# generate_csv=utils/generate_csv.py
-# python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv
-# python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv
-# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv
-# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set2 test ./data/dstc10_test2.csv
+# generate_csv='utils/generate_csv2.py'
+# num_prev=3
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv $num_prev
+# python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv $num_prev
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv $num_prev
+# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set2 test ./data/dstc10_test2.csv $num_prev
 # return
 
 # train

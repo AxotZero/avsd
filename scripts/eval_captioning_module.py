@@ -33,11 +33,11 @@ def eval_cap_helper(cfg, test_pkl, dstc=7):
     # cfg.device_ids = [cfg.device_ids[-1]]
 
     # doing our best to make it replicable
-    torch.manual_seed(0)
-    np.random.seed(0)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.cuda.set_device(cfg.device_ids[0])
+    # torch.manual_seed(0)
+    # np.random.seed(0)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+    # torch.cuda.set_device(cfg.device_ids[0])
 
     
     test_dataset = AVSD10Dataset(cfg, 'test', test_pkl, get_full_feat=False)

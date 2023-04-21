@@ -6,7 +6,22 @@ from utilities.config_constructor import Config
 from scripts.train_captioning_module import train_cap
 from scripts.eval_captioning_module import eval_cap
 
+import random
+import numpy as np
+
+
+def seed_everything(seed=0):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 def main(cfg):
+    seed_everything(2626)
     torch.multiprocessing.set_sharing_strategy('file_system')
     if 'train' in cfg.procedure:
         train_cap(cfg)

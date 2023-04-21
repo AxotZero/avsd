@@ -48,7 +48,7 @@ def generate_csv(duration_file, inp_json, phase, output_csv):
                     if ('reason' not in turn) or \
                        (len(turn['reason']) == 0):
                         masks.append(0)
-                        starts.append([-1]) 
+                        starts.append([-1])
                         ends.append([-1])
                     else:
                         mask = 0

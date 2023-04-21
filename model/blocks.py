@@ -6,6 +6,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class Mish(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        return x * torch.tanh(F.softplus(x))
+
 
 class LayerStack(nn.Module):
 
@@ -59,7 +66,7 @@ class VocabularyEmbedder(nn.Module):
                 self.embedder = nn.Sequential(
                     nn.Embedding(self.voc_size, pretrained_emb_dim).from_pretrained(weight_matrix),
                     nn.Linear(pretrained_emb_dim, self.emb_dim),
-                    nn.ReLU()
+                    Mish()
                 )
                 self.embedder[0].weight.requires_grad = emb_weights_req_grad
 
@@ -163,11 +170,12 @@ class PositionwiseFeedForward(nn.Module):
         self.fc1 = nn.Linear(d_model, d_ff)
         self.fc2 = nn.Linear(d_ff, d_model)
         self.dropout = nn.Dropout(dout_p)
+        self.mish = nn.ReLU()
 
     def forward(self, x):
         '''In, Out: (B, S, D)'''
         x = self.fc1(x)
-        x = F.relu(x)
+        x = self.mish(x)
         x = self.dropout(x)
         x = self.fc2(x)
 

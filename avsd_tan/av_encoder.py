@@ -7,8 +7,11 @@ import torch.nn.functional as F
 
 import numpy as np
 
-from model.blocks import (BridgeConnection, PositionwiseFeedForward, PositionalEncoder)
+from model.blocks import (BridgeConnection, PositionwiseFeedForward, PositionalEncoder, Mish)
 from .utils import get_seg_feats
+
+
+
 
 
 def build_mlp(dims, dout_p):
@@ -28,15 +31,13 @@ class VisualEncoder(nn.Module):
         self.pre_dropout = nn.Dropout(pre_dout)
         self.encode_rgb = build_mlp(dims, dout_p)
         self.encode_flow = build_mlp(dims, dout_p)
-        self.combine_rgb_flow = nn.Sequential(
-            nn.Linear(hidden_dim*2, hidden_dim), 
-            nn.ReLU()
-        )
+        self.combine_rgb_flow = nn.Linear(hidden_dim*2, hidden_dim)
+
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*4,
-            dropout=cfg.dout_p, batch_first=True
+            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*4,
+            norm_first=True, dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
             encoder_layer=attn_layer,
@@ -73,8 +74,8 @@ class AudioEncoder(nn.Module):
         self.pos_enc = PositionalEncoder(cfg.d_model, cfg.dout_p)
 
         attn_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim, nhead=8, dim_feedforward=hidden_dim*4,
-            dropout=cfg.dout_p, batch_first=True
+            d_model=hidden_dim, nhead=4, dim_feedforward=hidden_dim*4,
+            norm_first=True, dropout=cfg.dout_p, batch_first=True
         )
         self.self_attn = nn.TransformerEncoder(
             encoder_layer=attn_layer,
