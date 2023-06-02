@@ -16,8 +16,8 @@ def generate_csv(duration_file, inp_json, phase, output_csv, num_prev='1'):
     f=open(inp_json,'r')
     d1=json.loads(f.read())
 
-    column_names=['video_id','caption', 'summary','dialog','start','end','duration', 'seq_start', 'seq_end', 'tan_mask', 'phase','idx']
-    # column_names=['video_id','caption','start','end','duration', 'phase','idx']
+    # column_names=['video_id','caption', 'summary','dialog','start','end','duration', 'seq_start', 'seq_end', 'tan_mask', 'phase','idx']
+    column_names=['video_id','dialog','start','end','duration', 'seq_start', 'seq_end', 'tan_mask', 'phase','idx']
     # df2=pd.DataFrame(columns = column_names, dtype=object)
     ld={item1['image_id'] : item1 for item1 in d1['dialogs']}
     d_list=[]
@@ -31,8 +31,8 @@ def generate_csv(duration_file, inp_json, phase, output_csv, num_prev='1'):
             d['duration']=item[1]
             d['end'] = item[1]
             d['start'] = 0
-            for cap in ['caption', 'summary']:
-                d[cap] = 'C: ' + (item1[cap] if cap in item1 else '') + ' CLS'
+            # for cap in ['caption', 'summary']:
+            #     d[cap] = 'C: ' + (item1[cap] if cap in item1 else '') + ' CLS'
             d['phase'] = phase
 
             dialogs = item1['dialog']

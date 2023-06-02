@@ -131,3 +131,5 @@ class Config(object):
         self.dialog_weight = args.dialog_weight
         self.caption_weight = args.caption_weight
         self.shrank = args.shrank
+        self.av_mapping = args.av_mapping
+        self.bimodal_encoder = args.bimodal_encoder

@@ -7,11 +7,9 @@ import torch.nn.functional as F
 
 import numpy as np
 
+from model.encoders import BiModalEncoder
 from model.blocks import (BridgeConnection, PositionwiseFeedForward, PositionalEncoder, Mish)
 from .utils import get_seg_feats
-
-
-
 
 
 def build_mlp(dims, dout_p):
@@ -196,10 +194,11 @@ class CrossTransformer(nn.Module):
 
 
 class AVEncoder(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, pad_idx):
         super().__init__()
         self.num_seg = cfg.num_seg
         self.seg_method = cfg.seg_method
+        self.pad_idx = pad_idx
         self.visual_encoder = VisualEncoder(
             cfg, 
             dims=[2048, cfg.d_model],
@@ -212,14 +211,36 @@ class AVEncoder(nn.Module):
             dout_p=cfg.dout_p,
             pre_dout=0.2
         )
-        self.cross_encoder = BottleneckTransformer(cfg)
 
-    
+        self.bimodal_encoder = cfg.bimodal_encoder
+        if cfg.bimodal_encoder:
+            self.cross_encoder = BiModalEncoder(
+                d_model_A=cfg.d_model, 
+                d_model_V=cfg.d_model, 
+                d_model=cfg.d_model, 
+                dout_p=cfg.dout_p, 
+                H=4, 
+                d_ff_A=cfg.d_model*2, 
+                d_ff_V=cfg.d_model*2, 
+                N=cfg.num_encoder_layers)
+        else:
+            self.cross_encoder = BottleneckTransformer(cfg)
+
+    def make_bimodal_mask(self, x):
+        return (x[:, :, 0] != self.pad_idx).unsqueeze(1)
+
     def forward(self, rgb, flow, aud, vis_mask=None, aud_mask=None):
+        
+
         v = self.visual_encoder(rgb, flow, vis_mask)
         a = self.audio_encoder(aud, aud_mask)
 
-        v, a = self.cross_encoder(v, a, a_mask=vis_mask, b_mask=aud_mask)
+        if self.bimodal_encoder:
+            v_mask = self.make_bimodal_mask(rgb)
+            a_mask = self.make_bimodal_mask(aud)
+            v, a = self.cross_encoder(v, a, a_mask=v_mask, b_mask=a_mask)
+        else:
+            v, a = self.cross_encoder(v, a, a_mask=vis_mask, b_mask=aud_mask)
 
         v = get_seg_feats(v, self.num_seg, vis_mask, method=self.seg_method)
         a = get_seg_feats(a, self.num_seg, aud_mask, method=self.seg_method)

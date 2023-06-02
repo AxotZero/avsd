@@ -27,15 +27,17 @@ class AVSDTan(nn.Module):
         self.cls_idx = train_dataset.cls_idx
         self.sent_start_idx = train_dataset.sent_start_idx
         self.sent_end_idx = train_dataset.sent_end_idx
-        self.cap_idx = train_dataset.cap_idx
 
         # encode features
         self.uni_decoder = UniDecoder(cfg, vocab_size, self.cls_idx)
         self.uni_decoder.emb_C.init_word_embeddings(train_dataset.train_vocab.vectors, cfg.unfreeze_word_emb)
 
         # encode word embedding
-        self.av_encoder = AVEncoder(cfg)
-        self.av_fusion = AVFusion(cfg)
+        self.av_encoder = AVEncoder(cfg, self.pad_idx)
+        if cfg.av_mapping:
+            self.av_fusion = AVMapping(cfg)
+        else:
+            self.av_fusion = AVFusion(cfg)
         self.tan = TAN(cfg)
 
         self.cross_decoder = CrossDecoder(cfg)
@@ -51,7 +53,7 @@ class AVSDTan(nn.Module):
 
     def get_sent_indices(self, text):
         # specify the index of map2d the word need to attend
-        sent_indices = ((text == self.sent_start_idx) | (text == self.cap_idx)).long() 
+        sent_indices = (text == self.sent_start_idx).long() 
         sent_indices = torch.cumsum(sent_indices, dim=-1) - 1
         sent_indices = torch.clamp(sent_indices, min=0)
         return sent_indices
@@ -79,7 +81,6 @@ class AVSDTan(nn.Module):
     def forward(self, 
                 feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
                 dialog_x=None, dialog_y=None,                   # dialog
-                caption_x=None, caption_y=None,                 # caption
                 tan_target=None, tan_mask=None,                 # tan
                 map2d=None, compute_loss=True, ret_map2d=False):# return something
 

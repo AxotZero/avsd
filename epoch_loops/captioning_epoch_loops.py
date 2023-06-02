@@ -431,8 +431,6 @@ def batch_to_device(batch, device):
     batch['feature_stacks']['audio'] = batch['feature_stacks']['audio'].to(device)
     batch['visual_mask'] = batch['visual_mask'].to(device)
     batch['audio_mask'] = batch['audio_mask'].to(device)
-    batch['caption'] = batch['caption'].to(device)
-    batch['summary'] = batch['summary'].to(device)
     batch['dialog'] = batch['dialog'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
     batch['tan_mask'] = batch['tan_mask'].to(device)
@@ -462,12 +460,10 @@ def training_loop(cfg, model, loader, optimizer, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
 
         sim_loss, tan_loss, dialog_loss, caption_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
             dialog_x, dialog_y,
-            summary_x, summary_y,
             batch['tan_label'], batch['tan_mask'],
             compute_loss=True
         )
@@ -558,13 +554,10 @@ def validation_next_word_loop(cfg, model, loader, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
-
         with torch.no_grad():
             sim_loss, tan_loss, dialog_loss, caption_loss = model(
                 batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                 dialog_x, dialog_y,
-                summary_x, summary_y,
                 batch['tan_label'], batch['tan_mask'],
                 compute_loss=True
             )
@@ -737,36 +730,36 @@ def validation_1by1_loop(cfg, model, loader, epoch):
                 })
             predictions['dialogs'].append({'image_id': video_id, 'dialog': segment})
 
-    if cfg.log_path is None:
-        return None
-    else:
+    # if cfg.log_path is None:
+    #     return None
+    # else:
         # SAVING THE RESULTS IN A JSON FILE
-        if cfg.procedure == 'train_test':
-            save_filename = f'captioning_results_{phase}_e{epoch}.json'
-        else:
-            save_filename = f'captioning_results_{phase}.json'
-        submission_path = os.path.join(cfg.log_path, save_filename)
+    if cfg.procedure == 'train_test':
+        save_filename = f'captioning_results_{phase}_e{epoch}.json'
+    else:
+        save_filename = f'captioning_results_{phase}.json'
+    submission_path = os.path.join(cfg.log_path, save_filename)
 
-        # in case TBoard is not defined make logdir
-        os.makedirs(cfg.log_path, exist_ok=True)
+    # in case TBoard is not defined make logdir
+    os.makedirs(cfg.log_path, exist_ok=True)
 
-        # rename if already exists
-        if os.path.exists(submission_path):
-            root, ext = os.path.splitext(submission_path)
-            n = 1
-            while os.path.exists(submission_path):
-                submission_path = f'{root}-{n}{ext}'
-                n += 1
+    # rename if already exists
+    if os.path.exists(submission_path):
+        root, ext = os.path.splitext(submission_path)
+        n = 1
+        while os.path.exists(submission_path):
+            submission_path = f'{root}-{n}{ext}'
+            n += 1
 
-        with open(submission_path, 'w') as outf:
-            json.dump(predictions, outf, indent=2)
-        duration = time.time() - start_timer
-        # blocks the printing
-        with HiddenPrints():
-            val_metrics = AVSD_eval(ground_truth_filenames=reference_paths,
-                                    prediction_filename=submission_path,
-                                    stopwords_filename=cfg.stopwords,
-                                    last_only=cfg.last_only,
-                                    verbose=False).evaluate()
+    with open(submission_path, 'w') as outf:
+        json.dump(predictions, outf, indent=2)
+    duration = time.time() - start_timer
+    # blocks the printing
+    with HiddenPrints():
+        val_metrics = AVSD_eval(ground_truth_filenames=reference_paths,
+                                prediction_filename=submission_path,
+                                stopwords_filename=cfg.stopwords,
+                                last_only=cfg.last_only,
+                                verbose=False).evaluate()
 
-        return val_metrics, duration
+    return val_metrics, duration
