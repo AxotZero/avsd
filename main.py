@@ -171,6 +171,8 @@ def get_parser():
     parser.add_argument('--student_weight', type=float, default=1.0)
     parser.add_argument('--shrank', action='store_true')
     parser.add_argument('--jst', action='store_true')
+    parser.add_argument('--av_mapping', action='store_true')
+    parser.add_argument('--bimodal_encoder', action='store_true')
 
     
     parser.set_defaults(to_log=True)

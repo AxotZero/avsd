@@ -61,19 +61,25 @@ def eval_cap_helper(cfg, test_pkl, dstc=7):
     )
 
     print ('-' * 25)
-    print(f'DSTC{dstc} result:')
+    print(f'DSTC{dstc}_{cfg.decoding_method} result:')
     for metric, score in metrics.items():
         print ('| %s: %2.4f' % (metric, 100 * score))
     print ('-' * 25)
 
     if cfg.wandb:
-        wandb.log({f'test{dstc}/{metric}': score * 100 for metric, score in metrics.items()})
+        wandb.log({f'test{dstc}_{cfg.decoding_method}/{metric}': score * 100 for metric, score in metrics.items()})
 
 
 def eval_cap(cfg):
     test_pkl = load_pickle(f'{cfg.feature_dir}/test.pkl')
+    cfg.decoding_method = 'greedy'
     eval_cap_helper(cfg, test_pkl, dstc=7)
     eval_cap_helper(cfg, test_pkl, dstc=10)
+
+    cfg.decoding_method = 'beam_search'
+    eval_cap_helper(cfg, test_pkl, dstc=7)
+    eval_cap_helper(cfg, test_pkl, dstc=10)
+
 
                 
 

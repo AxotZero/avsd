@@ -74,6 +74,7 @@ class CrossAttention(nn.Module):
         self.to_q = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_k = nn.Linear(cfg.d_model, cfg.d_model)
         self.to_v = nn.Linear(cfg.d_model, cfg.d_model)
+        self.norm = nn.LayerNorm(cfg.d_model)
 
         self.text_norm = nn.LayerNorm(cfg.d_model)
         self.av_norm = nn.LayerNorm(cfg.d_model)
@@ -110,14 +111,39 @@ class CrossAttention(nn.Module):
 
         attn = (q*k).sum(-1, keepdim=True)
         attn = attn / self.scale # bs, num_word, num_valid, num_head, 1
-        ret_attn = F.sigmoid(attn)
+        attn = F.sigmoid(attn)
 
         # model output
-        attn = ret_attn / ret_attn.sum(dim=-3, keepdim=True)
+        # attn = ret_attn / ret_attn.sum(dim=-3, keepdim=True).detach()
         out = (attn*v).sum(dim=-3)
         out = out.view(bs, num_word, d_model)
+        out = self.norm(out)
         
-        return out, ret_attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
+        return out, attn.mean(-2).squeeze(-1) # mean attn weight of each head and squeeze 
+
+
+class MemoryGate(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+
+        self.dropout = nn.Dropout(cfg.dout_p)
+
+        # text self attn
+        self.mlp = nn.Sequential(
+            nn.Linear(2*cfg.d_model, cfg.d_model),
+            nn.ReLU(),
+            nn.Linear(cfg.d_model, 1),
+            nn.Sigmoid()
+        )
+
+
+    def forward(self, text, memory):
+        
+        x = torch.cat([text, memory], axis=-1)
+        x = self.dropout(x)
+        x = self.mlp(x)
+
+        return x
 
 
 class Fusion(nn.Module):
@@ -184,6 +210,7 @@ class CrossDecoderLayer(nn.Module):
         self.cross_attn = CrossAttention(cfg)
         self.dropout = nn.Dropout(cfg.dout_p)
         self.norm = nn.LayerNorm(cfg.d_model)
+        self.memory_gate = MemoryGate(cfg)
 
         if is_teacher:
             self.cap_norm = nn.LayerNorm(cfg.d_model)
@@ -222,6 +249,15 @@ class CrossDecoderLayer(nn.Module):
         # ff + res
         dialog_embs = self.res2(dialog_embs, self.ff)
         return dialog_embs, attn
+        res, attn = self.cross_attn(text, av_feat, attn_sent_index)
+        
+        memory_ratio = self.memory_gate(text, res)
+        text = self.norm((1-memory_ratio) * text + memory_ratio * res)
+
+        # ff + res
+        text = self.res2(text, self.ff)
+
+        return text, attn, memory_ratio
 
 
 class CrossDecoder(nn.Module):
@@ -229,28 +265,28 @@ class CrossDecoder(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([CrossDecoderLayer(cfg, is_teacher) for _ in range(cfg.num_decoder_layers)])
     
-    def forward(self, 
-                dialog_embs, map2d, caption_embs = None, 
-                dialog_pad_mask = None, dialog_text_mask = None, 
-                caption_pad_mask= None, caption_text_mask = None,
-                attn_sent_index = None):
+    # def forward(self, 
+    #             dialog_embs, map2d, caption_embs = None, 
+    #             dialog_pad_mask = None, dialog_text_mask = None, 
+    #             caption_pad_mask= None, caption_text_mask = None,
+    #             attn_sent_index = None):
 
-        attns = []
-        hidden_embs = []
-        for layer in self.layers:
-            dialog_embs, attn = layer(dialog_embs, map2d, caption_embs, 
-                                      dialog_text_mask, caption_pad_mask, 
-                                      attn_sent_index)
-            attns.append(attn)
-            hidden_embs.append(dialog_embs)
+    #     attns = []
+    #     hidden_embs = []
+    #     for layer in self.layers:
+    #         dialog_embs, attn = layer(dialog_embs, map2d, caption_embs, 
+    #                                   dialog_text_mask, caption_pad_mask, 
+    #                                   attn_sent_index)
+    #         attns.append(attn)
+    #         hidden_embs.append(dialog_embs)
         
-        hidden_embs = hidden_embs[len(hidden_embs)//2:]
-        hidden_embs = torch.stack(hidden_embs, dim=1)
-        attn = self.compute_sentence_attn_w(attns, dialog_pad_mask.squeeze(), attn_sent_index)
+    #     hidden_embs = hidden_embs[len(hidden_embs)//2:]
+    #     hidden_embs = torch.stack(hidden_embs, dim=1)
+    #     attn = self.compute_sentence_attn_w(attns, dialog_pad_mask.squeeze(), attn_sent_index)
 
-        return dialog_embs, hidden_embs, attn
+    #     return dialog_embs, hidden_embs, attn
     
-    def compute_sentence_attn_w(self, attn, padding_mask, attn_sent_index):
+    def compute_sentence_attn_w(self, attn, memory_ratio, padding_mask, attn_sent_index):
         """
         input:
             attn: num_decoder_layer, bs, num_word, num_valid
@@ -260,19 +296,35 @@ class CrossDecoder(nn.Module):
             attn: bs, num_sent, num_valid # average of attn_weight of given sentence
         """
         attn = torch.stack(attn, dim=0).mean(dim=0) # bs, num_word, num_valid
+        memory_ratio = torch.stack(memory_ratio, dim=0).mean(dim=0)
         
         bs, _, num_valid = attn.size()
         num_sent = torch.max(attn_sent_index) + 1
         
-        sent_attn = []    
+        sent_attn = []
         for sent_idx in range(num_sent):
             sent_mask = (attn_sent_index == sent_idx) & padding_mask
             attn2 = attn.clone()
+            memory_ratio2 = memory_ratio.clone()
             attn2[~sent_mask] = 0
-            num_word_of_sent = sent_mask.float().sum(dim=-1, keepdim=True) # bs, 1
-            attn2 = attn2.sum(1) / num_word_of_sent # bs, num_valid
+            memory_ratio2[~sent_mask] = 0
+            memory_amount = memory_ratio2.sum(dim=-2, keepdim=True).squeeze(-1)
+            # num_word_of_sent = sent_mask.float().sum(dim=-1, keepdim=True) # bs, 1
+
+            attn2 = (attn2 * memory_ratio2).sum(1) / memory_amount # bs, num_valid
             sent_attn.append(attn2)
         sent_attn = torch.stack(sent_attn, dim=1) # bs, num_sent, num_valid
         return sent_attn
+    
+    def forward(self, text, av_feat, padding_mask=None, text_mask=None, attn_sent_index=None):
+        attns = []
+        memory_ratios = []
+        for decoder in self.layers:
+            text, attn, memory_ratio = decoder(text, av_feat, text_mask, attn_sent_index)
+            attns.append(attn)
+            memory_ratios.append(memory_ratio)
+            
+        attn = self.compute_sentence_attn_w(attns, memory_ratios, padding_mask, attn_sent_index)
+        return text, attn
         
 

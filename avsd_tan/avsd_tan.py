@@ -45,8 +45,11 @@ class AVSDTan(nn.Module):
         self.caption_uni_decoder = UniDecoder(cfg, vocab_size)
 
         # encode word embedding
-        self.av_encoder = AVEncoder(cfg)
-        self.av_fusion = AVFusion(cfg)
+        self.av_encoder = AVEncoder(cfg, self.pad_idx)
+        if cfg.av_mapping:
+            self.av_fusion = AVMapping(cfg)
+        else:
+            self.av_fusion = AVFusion(cfg)
         self.tan = TAN(cfg)
 
         self.cross_decoder = CrossDecoder(cfg, self.is_teacher)
@@ -150,7 +153,6 @@ class JST(nn.Module):
     def forward(self,
                 feats=None, visual_mask=None, audio_mask=None,  # video, audio feature
                 dialog_x=None, dialog_y=None,                   # dialog
-                caption_x=None, caption_y=None,                 # caption
                 tan_target=None, tan_mask=None,                 # tan
                 map2d=None, ret_map2d=False, compute_loss=True):
 
