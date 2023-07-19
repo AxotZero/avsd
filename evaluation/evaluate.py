@@ -15,6 +15,7 @@ from pycocoevalcap.cider.cider import Cider
 
 from stopword_filter import StopwordFilter
 
+from pdb import set_trace as bp
 
 class AVSD_eval(object):
 
@@ -152,10 +153,12 @@ class AVSD_eval(object):
         hypo_sent, hypo_int = self.prediction
         ref_coco = self.tokenizer.tokenize(self.to_coco(ref_sent, ref_sent.keys()))
         hypo_coco = self.tokenizer.tokenize(self.to_coco(hypo_sent, ref_sent.keys()))
+        # hypo_coco = {k:[v] for k, v in hypo_coco.items()}
         final_scores = {}
         for scorer, method in self.scorers:
             if self.verbose:
                 print ('computing %s score...'%(scorer.method()))
+            
             score, scores = scorer.compute_score(ref_coco, hypo_coco)
             if type(score) == list:
                 for m, s in zip(method, score):

@@ -15,18 +15,11 @@ from avsd_tan.utils import compute_iou, get_valid_position_norm, get_seg_feats
 def caption_iterator(cfg, batch_size, phase):
     print(f'Contructing caption_iterator for "{phase}" phase')
     
-    CAPTION = data.ReversibleField(
-        tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
-        pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
-    )
-    SUMMARY = data.ReversibleField(
-        tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
-        pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
-    )
     DIALOG = data.ReversibleField(
         tokenize=str.split, init_token=cfg.start_token, eos_token=cfg.end_token,
         pad_token=cfg.pad_token, lower=False, batch_first=True, is_target=True
     )
+    
     INDEX = data.Field(
         sequential=False, use_vocab=False, batch_first=True
     )
@@ -34,8 +27,6 @@ def caption_iterator(cfg, batch_size, phase):
     # the order has to be the same as in the table
     fields = [
         ('video_id', None),
-        ('caption', CAPTION),
-        ('summary', SUMMARY),
         ('dialog', DIALOG),
         ('start', None),
         ('end', None),
@@ -52,11 +43,9 @@ def caption_iterator(cfg, batch_size, phase):
     )
 
     vectors = torchtext.vocab.GloVe(name='840B', dim=300, cache='./.vector_cache')
-    text_fields = [dataset.dialog, dataset.caption, dataset.summary]
+    text_fields = [dataset.dialog]
     # build vocab
     DIALOG.build_vocab(*text_fields, min_freq=cfg.min_freq_caps, vectors=vectors)
-    setattr(CAPTION, 'vocab', DIALOG.vocab)
-    setattr(SUMMARY, 'vocab', DIALOG.vocab)
 
     train_vocab = DIALOG.vocab
 
@@ -79,7 +68,7 @@ def caption_iterator(cfg, batch_size, phase):
     datasetloader = data.BucketIterator(dataset, batch_size, sort_key=lambda x: 0, 
                                         # device=torch.device(cfg.device), 
                                         device=None,
-                                        repeat=False, shuffle=True)
+                                        repeat=False, shuffle= (phase=='train'))
     return train_vocab, datasetloader
 
 
@@ -163,7 +152,7 @@ class AudioVideoFeaturesDataset(Dataset):
         return masks
     
     def __getitem__(self, indices):
-        video_ids, captions, summarys, dialogs, starts, ends =[], [], [], [], [], []
+        video_ids, dialogs, starts, ends = [], [], [], []
         vid_stacks_rgb, vid_stacks_flow, aud_stacks = [], [], []
         sents_iou_target_stacks = []
         tan_masks = []
@@ -171,7 +160,7 @@ class AudioVideoFeaturesDataset(Dataset):
         # [3]
         for idx in indices:
             idx = idx.item()
-            video_id, caption, summary, dialog, start, end, duration, seq_starts, seq_ends, tan_mask, _, _ = self.dataset.iloc[idx]
+            video_id, dialog, start, end, duration, seq_starts, seq_ends, tan_mask, _, _ = self.dataset.iloc[idx]
             
             stack = load_features_from_npy(
                 self.feature_pkl, self.cfg, 
@@ -197,6 +186,7 @@ class AudioVideoFeaturesDataset(Dataset):
             
             # get clip feature
             feat_len = max(min(len(vid_stack_rgb), len(vid_stack_flow), len(aud_stack)), self.num_seg)
+            # feat_len = self.num_seg
             vid_stack_rgb = self.get_seg_feats(vid_stack_rgb, feat_len, method=self.cfg.seg_method)
             vid_stack_flow = self.get_seg_feats(vid_stack_flow, feat_len, method=self.cfg.seg_method)
             aud_stack = self.get_seg_feats(aud_stack, feat_len, method=self.cfg.seg_method)
@@ -210,7 +200,7 @@ class AudioVideoFeaturesDataset(Dataset):
             else:
                 seq_starts = [[-1]]
                 seq_ends = [[-1]]
-                tan_mask = [-1]
+                tan_mask = [0]
 
             sents_iou_target = []
 
@@ -220,8 +210,8 @@ class AudioVideoFeaturesDataset(Dataset):
                     # get max iou of given valid_position
                     max_iou_of_vp = 0
                     for s, e in zip(seq_start, seq_end):
-                        s = s / duration
-                        e = e / duration
+                        s = max(0, s) / duration
+                        e = min(e, duration) / duration
                         iou = compute_iou((s, e), (vs, ve))
                         max_iou_of_vp = max(max_iou_of_vp, iou)
                     ious_target.append(max_iou_of_vp)
@@ -230,9 +220,7 @@ class AudioVideoFeaturesDataset(Dataset):
 
             # append info for this index to the lists
             video_ids.append(video_id)
-            summarys.append(summary)
             dialogs.append(dialog)
-            captions.append(caption)
             starts.append(int(start))
             ends.append(int(end))
             vid_stacks_rgb.append(vid_stack_rgb)
@@ -261,8 +249,6 @@ class AudioVideoFeaturesDataset(Dataset):
         
         batch_dict = {
             'video_ids': video_ids,
-            'captions': captions,
-            'summarys': summarys,
             'dialogs': dialogs,
             'starts': starts,
             'ends': ends,
@@ -292,6 +278,7 @@ class AVSD10Dataset(Dataset):
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.phase = phase
+        self.shrank = cfg.shrank
         self.get_full_feat = get_full_feat
 
         if phase == 'train':
@@ -308,6 +295,7 @@ class AVSD10Dataset(Dataset):
 
         # caption dataset *iterator*
         self.train_vocab, self.caption_loader = caption_iterator(cfg, self.batch_size, self.phase)
+        print('num_vocab', len(self.train_vocab))
         
         self.vocab_size = len(self.train_vocab)
         self.pad_idx = self.train_vocab.stoi[cfg.pad_token]
@@ -317,7 +305,8 @@ class AVSD10Dataset(Dataset):
         self.sent_end_idx = self.train_vocab.stoi[cfg.sent_end_token]
         self.cls_idx = self.train_vocab.stoi['CLS']
         self.cap_idx = self.train_vocab.stoi['C:']
-
+        self.sum_idx = self.train_vocab.stoi['S:']
+        
         self.features_dataset = AudioVideoFeaturesDataset(
             feature_pkl, self.meta_path, torch.device(cfg.device), 
             self.pad_idx, self.get_full_feat, cfg
@@ -329,9 +318,8 @@ class AVSD10Dataset(Dataset):
     def __getitem__(self, index):
         caption_data = self.caption_datas[index]
         ret = self.features_dataset[caption_data.idx]
-        ret['caption'] = caption_data.caption
-        ret['summary'] = caption_data.summary
         ret['dialog'] = caption_data.dialog
+
         return ret
 
 

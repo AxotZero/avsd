@@ -128,5 +128,13 @@ class Config(object):
 
         self.sim_weight = args.sim_weight
         self.tan_weight = args.tan_weight
+
+        self.teacher_weight = args.teacher_weight
+        self.student_weight = args.student_weight
+        self.jst = args.jst
+        
         self.dialog_weight = args.dialog_weight
         self.caption_weight = args.caption_weight
+        self.shrank = args.shrank
+        self.av_mapping = args.av_mapping
+        self.bimodal_encoder = args.bimodal_encoder

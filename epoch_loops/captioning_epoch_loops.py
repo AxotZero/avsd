@@ -3,6 +3,7 @@ import os
 import json
 from tqdm import tqdm
 import torch
+import torch.nn.functional as F
 import time
 # from time import time
 from avsd_tan.utils import get_valid_position
@@ -45,8 +46,8 @@ def teacher_force_decoder(model, feature_stacks, max_len, start_idx, end_idx, pa
         return trg
 
 
-def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                           sent_start_idx=None, sent_end_idx=None, last_only=False):
+def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, cls_idx, modality,
+                    sent_start_idx=None, sent_end_idx=None, last_only=False):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
     dialog_idx = batch['dialog']
@@ -66,7 +67,6 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
             raise Exception(f'Unknown modality: {modality}')
         
         # for each QA turn, only last if last_only
-        
         s = 0 if not last_only else start_pos.size(-1)-1
         for t in range(s, start_pos.size(1)):
             # store source information
@@ -96,10 +96,6 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
             map2d = None
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
                 
-                # masks = make_masks(feature_stacks, trg, modality, pad_idx)
-                # pad_mask, text_mask = make_text_masks(trg, pad_idx)
-                # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
-                # bp()
                 preds, attn, map2d = model(
                     batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                     dialog_x=trg, map2d=map2d, ret_map2d=True, compute_loss=False
@@ -113,18 +109,20 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
                 current_position += 1
                 trg[batch_indices, current_position] = next_word[:, 0]
                 completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+
             targets.append(out)
             attweights.append(attn[:, -1])
     return sources, targets, attweights
 
 
-def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                      sent_start_idx=None, sent_end_idx=None, last_only=False, 
-                      topk=0, topp=0.0, repetition_penalty=2.0, filter_value=0):
+def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, cls_idx, modality,
+                           sent_start_idx=None, sent_end_idx=None, last_only=False,
+                           beam_size = 5, length_penalty = 0.3):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
-    caption_idx = batch['caption']
-    start_pos, end_pos = get_context_positions(caption_idx, sent_start_idx, sent_end_idx)
+    dialog_idx = batch['dialog']
+    start_pos, end_pos = get_context_positions(dialog_idx, sent_start_idx, sent_end_idx)
+    caption_x = batch['caption']
     sources = []
     targets = []
     attweights = []
@@ -140,7 +138,6 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
             raise Exception(f'Unknown modality: {modality}')
         
         # for each QA turn, only last if last_only
-        
         s = 0 if not last_only else start_pos.size(-1)-1
         for t in range(s, start_pos.size(1)):
             # store source information
@@ -148,7 +145,7 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
             src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
             for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
                 if e >= 0:
-                    src[b, :e-s] = caption_idx[b, s:e]
+                    src[b, :e-s] = dialog_idx[b, s:e]
             sources.append(src)
             # prepare context used for teacher forcing
             max_context_len = int(torch.max(end_pos[:, t])) + 1
@@ -157,7 +154,7 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
             current_position = torch.zeros(B, dtype=torch.long, device=device)
             for b, e in enumerate(end_pos[:, t]):
                 if e >= 0:
-                    trg[b, :e+1] = caption_idx[b, :e+1]
+                    trg[b, :e+1] = dialog_idx[b, :e+1]
                     current_position[b] = e
                 else: # no more sentences
                     completeness_mask[b] = 1
@@ -165,134 +162,71 @@ def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modali
             out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
             pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
             end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
-            
+
+            score = torch.zeros((B), dtype = torch.float, device=device)
             batch_indices = torch.arange(B, dtype=torch.long, device=device)
             map2d = None
             while (out.size(-1) <= max_len) and (not completeness_mask.all()):
-                
-                # masks = make_masks(feature_stacks, trg, modality, pad_idx)
-                pad_mask, text_mask = make_text_masks(trg, pad_idx)
-                # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
+                # bp()
+                if out.size(-1) > 1 and map2d.size(0) == 1:
+                    generate_beam = lambda x: x.repeat(beam_size, *([1] * (len(x.size()) - 1)))
 
+                    map2d = generate_beam(map2d)
+                    trg = generate_beam(trg)
+                    for k in batch['feature_stacks'].keys():
+                        batch['feature_stacks'][k] = generate_beam(batch['feature_stacks'][k])
+                    batch['visual_mask'] = generate_beam(batch['visual_mask'])
+                    batch['audio_mask'] = generate_beam(batch['audio_mask'])
+                    caption_x = generate_beam(caption_x)
+                
+                dialog_x = trg if out.size(-1) <= 1 else torch.cat([trg, out[:, 1:]], dim=-1)
                 preds, attn, map2d = model(
-                    batch['feature_stacks'], trg, 
-                    batch['visual_mask'], batch['audio_mask'], 
-                    padding_mask=pad_mask, text_mask=text_mask,
-                    map2d=map2d, ret_map2d=True
+                    batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
+                    dialog_x=dialog_x, map2d=map2d, caption_x=caption_x, ret_map2d=True, compute_loss=False
                 )
-                preds[:, :, [0, sent_start_idx, sent_start_idx]] = float('-inf')  # suppress UNK
-
-
-                # filter topk
-                preds = preds[batch_indices, current_position]
-                preds = F.softmax(preds, dim=-1)
-
-                for index in range(B):
-                    for token_id in set(out[index].cpu().numpy()):
-                        preds[index][token_id] /= repetition_penalty
-                preds = preds / preds.sum(-1)
-                if topk > 0:
-                    for pred in preds:
-                        indices_to_remove = pred < torch.topk(pred, topk)[0][..., -1, None]
-                        pred[indices_to_remove] = filter_value  # 对于topk之外的其他元素的logits值设为负无穷
-                # filter topp
-                if topp > 0.0:
-                    sorted_logits, sorted_indices = torch.sort(preds, descending=True, dim=-1)  # 对logits进行递减排序
-                    cumulative_probs = torch.cumsum(sorted_logits, dim=-1)
-
-                    # Remove tokens with cumulative probability above the threshold
-                    sorted_indices_to_remove = cumulative_probs > topp
-                    # Shift the indices to the right to keep also the first token above the threshold
-                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-                    sorted_indices_to_remove[..., 0] = 0
-                    for index, pred in enumerate(preds):
-                        indices_to_remove = sorted_indices[index][sorted_indices_to_remove[index]]
-                        pred[indices_to_remove] = filter_value
+                # preds: bs, seq_len, num_vocab
+                # preds[:, :, 0] = float('-inf')  # suppress UNK
+                preds = F.log_softmax(preds, dim=-1)
+                preds[:, :, [0, pad_idx, cls_idx]] = float('-inf')
+                # next_word = torch.where(completeness_mask==0,
+                #                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
+                #                         end_idx_)
+                preds = preds[:, -1, :] # last output
+                new_score, next_word = preds.topk(k=beam_size, dim=-1)
+                # new_score, next_word = new_score[:]
+                # new_score += score # 1 or beam, beam
+                new_outs = []
+                for idx1 in range(out.size(0)):
+                    if end_idx in out[idx1]:
+                        new_out = torch.cat([out[idx1], pad_idx_[0]], dim=-1)
+                        new_outs.append(
+                            (new_out, 
+                             score[idx1],
+                             torch.sum(new_out != pad_idx),
+                             attn[idx1]))
+                        continue
+                    
+                    for idx2 in range(beam_size):
+                        new_out = torch.cat([out[idx1], next_word[idx1, idx2].unsqueeze(0)], dim=-1)
+                        new_outs.append(
+                            (new_out, 
+                             score[idx1] + new_score[idx1, idx2],
+                             torch.sum(new_out != pad_idx),
+                             attn[idx1]))
                 
-                # select word
-                next_word = torch.where(completeness_mask==0,
-                                        torch.multinomial(preds, num_samples=1),
-                                        end_idx_)
-                
-                out = torch.cat([out, next_word], dim=-1)
-                trg = torch.cat([trg, pad_idx_], dim=-1)
-                current_position += 1
-                trg[batch_indices, current_position] = next_word[:, 0]
-                completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+                new_outs = sorted(new_outs, key=lambda x: x[1] / (x[2] ** length_penalty))[-beam_size:]
+                out = torch.stack([o[0] for o in new_outs], dim=0)
+                score = torch.stack([o[1] for o in new_outs], dim=0)
+
+                # out = torch.cat([out, next_word], dim=-1)
+                # trg = torch.cat([trg, pad_idx_], dim=-1)
+                # current_position += 1
+                # trg[batch_indices, current_position] = next_word[:, 0]
+                # completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
+            attn = new_outs[-1][3][-1][None, :]
+            out = out[-1][None, :]
             targets.append(out)
-            attweights.append(attn[:, -1])
-    return sources, targets, attweights
-
-
-def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                           sent_start_idx=None, sent_end_idx=None, last_only=False, beam_size=5):
-    assert model.training is False, 'call model.eval first'
-    feature_stacks = batch['feature_stacks']
-    caption_idx = batch['caption']
-    start_pos, end_pos = get_context_positions(caption_idx, sent_start_idx, sent_end_idx)
-    sources = []
-    targets = []
-    attweights = []
-    with torch.no_grad():
-
-        if 'audio' in modality:
-            B, _Sa_, _Da_ = feature_stacks['audio'].shape
-            device = feature_stacks['audio'].device
-        elif modality == 'video':
-            B, _Sv_, _Drgb_ = feature_stacks['rgb'].shape
-            device = feature_stacks['rgb'].device
-        else:
-            raise Exception(f'Unknown modality: {modality}')
-        
-        # for each QA turn, only last if last_only
-        
-        s = 0 if not last_only else start_pos.size(-1)-1
-        for t in range(s, start_pos.size(1)):
-            # store source information
-            max_src_context_len = int(torch.max(end_pos[:, t] - start_pos[:, t]))
-            src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
-            for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
-                if e >= 0:
-                    src[b, :e-s] = caption_idx[b, s:e]
-            sources.append(src)
-            # prepare context used for teacher forcing
-            max_context_len = int(torch.max(end_pos[:, t])) + 1
-            trg = torch.full((B, max_context_len), pad_idx, dtype=torch.long, device=device)
-            completeness_mask = torch.zeros(B, 1).byte().to(device)
-            current_position = torch.zeros(B, dtype=torch.long, device=device)
-            for b, e in enumerate(end_pos[:, t]):
-                if e >= 0:
-                    trg[b, :e+1] = caption_idx[b, :e+1]
-                    current_position[b] = e
-                else: # no more sentences
-                    completeness_mask[b] = 1
-            # greedy decoding
-            out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
-            pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
-            end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
-            
-            batch_indices = torch.arange(B, dtype=torch.long, device=device)
-            map2d = None
-            while (out.size(-1) <= max_len) and (not completeness_mask.all()):
-                pad_mask, text_mask = make_text_masks(trg, pad_idx)
-
-                preds, attn, map2d = model(
-                    batch['feature_stacks'], trg, 
-                    batch['visual_mask'], batch['audio_mask'], 
-                    padding_mask=pad_mask, text_mask=text_mask,
-                    map2d=map2d, ret_map2d=True
-                )
-                preds[:, :, 0] = float('-inf')  # suppress UNK
-                next_word = torch.where(completeness_mask==0,
-                                        preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
-                                        end_idx_)
-                out = torch.cat([out, next_word], dim=-1)
-                trg = torch.cat([trg, pad_idx_], dim=-1)
-                current_position += 1
-                trg[batch_indices, current_position] = next_word[:, 0]
-                completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
-            targets.append(out)
-            attweights.append(attn[:, -1])
+            attweights.append(attn)
     return sources, targets, attweights
 
 
@@ -394,10 +328,6 @@ def get_context_masked_target(caption_idx, sent_start_idx, sent_end_idx, end_idx
         return caption_idx_y
 
 
-# def text2xy(batch_text_indices, sent_start_idx, sent_end_idx, end_idx, pad_idx):
-#     return batch_text_indices[:, :-1], get_context_masked_target(batch_text_indices, sent_start_idx, sent_end_idx, end_idx, pad_idx)
-
-
 def batch_to_device(batch, device):
     batch['starts'] = batch['starts'].to(device)
     batch['ends'] = batch['ends'].to(device)
@@ -406,8 +336,6 @@ def batch_to_device(batch, device):
     batch['feature_stacks']['audio'] = batch['feature_stacks']['audio'].to(device)
     batch['visual_mask'] = batch['visual_mask'].to(device)
     batch['audio_mask'] = batch['audio_mask'].to(device)
-    batch['caption'] = batch['caption'].to(device)
-    batch['summary'] = batch['summary'].to(device)
     batch['dialog'] = batch['dialog'].to(device)
     batch['tan_label'] = batch['tan_label'].to(device)
     batch['tan_mask'] = batch['tan_mask'].to(device)
@@ -417,10 +345,10 @@ def batch_to_device(batch, device):
 def training_loop(cfg, model, loader, optimizer, epoch):
     model.train()
     total_loss = 0
-    total_sim_loss = 0
-    total_dialog_loss = 0
-    total_caption_loss = 0
+    total_teacher_gen_loss = 0
+    total_student_gen_loss = 0
     total_tan_loss = 0
+    total_sim_loss = 0
 
     loader.dataset.update_iterator()
     pbar = tqdm(loader, ncols=100)
@@ -437,40 +365,30 @@ def training_loop(cfg, model, loader, optimizer, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
-<<<<<<< HEAD
+        caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
-        sim_loss, tan_loss, dialog_loss, caption_loss = model(
+        teacher_gen_loss, student_gen_loss, sim_loss, tan_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
             dialog_x, dialog_y,
-            summary_x, summary_y,
+            caption_x, caption_y,
             batch['tan_label'], batch['tan_mask'],
             compute_loss=True
         )
 
-=======
-
-        sim_loss, tan_loss, dialog_loss, caption_loss = model(
-            batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
-            dialog_x, dialog_y,
-            summary_x, summary_y,
-            batch['tan_label'], batch['tan_mask'],
-            compute_loss=True
-        )
-
->>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
         # multi device
-        sim_loss = sim_loss.mean()
+        teacher_gen_loss = teacher_gen_loss.mean()
+        student_gen_loss = student_gen_loss.mean()
         tan_loss = tan_loss.mean()
-        dialog_loss = dialog_loss.mean()
-        caption_loss = caption_loss.mean()
+        sim_loss = sim_loss.mean()
 
         loss = (
-            cfg.sim_weight * sim_loss + 
+            cfg.teacher_weight * teacher_gen_loss + 
+            cfg.student_weight * student_gen_loss +
             cfg.tan_weight * tan_loss +
-            cfg.dialog_weight * dialog_loss +
-            cfg.caption_weight * caption_loss
+            cfg.sim_weight * sim_loss
         )
+
+        
         loss.backward()
 
         if cfg.grad_clip is not None:
@@ -479,51 +397,58 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         optimizer.step()
 
         total_loss += loss.item()
-        total_sim_loss += sim_loss.item()
-        total_dialog_loss += dialog_loss.item()
-        total_caption_loss += caption_loss.item()
+        total_teacher_gen_loss += teacher_gen_loss.item()
+        total_student_gen_loss += student_gen_loss.item()
         total_tan_loss += tan_loss.item()
+        total_sim_loss += sim_loss.item()
 
         pbar.set_description(
-            '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+            '{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
                 'train', epoch, 
-                sim_loss.item(), tan_loss.item(), caption_loss.item(), dialog_loss.item()
+                teacher_gen_loss.item(),
+                student_gen_loss.item(),
+                tan_loss.item(), 
+                sim_loss.item()
             )
         )
         pbar.update()
 
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
-    total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
+    total_teacher_gen_loss /= len(loader)
+    total_student_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
+    total_sim_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'train/loss': total_loss,
-                'train/sim_loss': total_sim_loss,
+                'train/teacher_gen_loss': total_teacher_gen_loss,
+                'train/student_gen_loss': total_student_gen_loss,
                 'train/tan_loss': total_tan_loss,
-                'train/dialog_loss': total_dialog_loss,
-                'train/caption_loss': total_caption_loss,
+                'train/sim_loss': total_sim_loss
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('train {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+
+    print('{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+        'train', epoch, 
+        total_teacher_gen_loss,
+        total_student_gen_loss,
+        total_tan_loss, 
+        total_sim_loss
     ))
-            
+  
 
 def validation_next_word_loop(cfg, model, loader, epoch):
     model.eval()
     total_loss = 0
-    total_sim_loss = 0
-    total_dialog_loss = 0
-    total_caption_loss = 0
+    total_teacher_gen_loss = 0
+    total_student_gen_loss = 0
     total_tan_loss = 0
+    total_sim_loss = 0
 
     loader.dataset.update_iterator()
     phase = loader.dataset.phase
@@ -542,66 +467,75 @@ def validation_next_word_loop(cfg, model, loader, epoch):
             loader.dataset.pad_idx
         )
 
-        summary_x, summary_y = batch['summary'][:, :-1], batch['summary'][:, 1:]
+        caption_x, caption_y = batch['caption'][:, :-1], batch['caption'][:, 1:]
 
         with torch.no_grad():
-            sim_loss, tan_loss, dialog_loss, caption_loss = model(
+            teacher_gen_loss, student_gen_loss, sim_loss, tan_loss = model(
                 batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                 dialog_x, dialog_y,
-                summary_x, summary_y,
+                # summary_x, summary_y,
+                caption_x, caption_y,
                 batch['tan_label'], batch['tan_mask'],
                 compute_loss=True
             )
 
             # multi device
-            sim_loss = sim_loss.mean()
+            teacher_gen_loss = teacher_gen_loss.mean()
+            student_gen_loss = student_gen_loss.mean()
             tan_loss = tan_loss.mean()
-            dialog_loss = dialog_loss.mean()
-            caption_loss = caption_loss.mean()
+            sim_loss = sim_loss.mean()
+
 
             loss = (
-                cfg.sim_weight * sim_loss + 
+                cfg.teacher_weight * teacher_gen_loss + 
+                cfg.student_weight * student_gen_loss +
                 cfg.tan_weight * tan_loss +
-                cfg.dialog_weight * dialog_loss +
-                cfg.caption_weight * caption_loss
+                cfg.sim_weight * sim_loss
             )
 
             total_loss += loss.item()
-            total_sim_loss += sim_loss.item()
-            total_dialog_loss += dialog_loss.item()
-            total_caption_loss += caption_loss.item()
+            total_teacher_gen_loss += teacher_gen_loss.item()
+            total_student_gen_loss += student_gen_loss.item()
             total_tan_loss += tan_loss.item()
+            total_sim_loss += sim_loss.item()
 
             pbar.set_description(
-                '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-                    phase, epoch, 
-                    sim_loss.item(), tan_loss.item(), caption_loss.item(), dialog_loss.item()
+                '{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+                    'train', epoch, 
+                    teacher_gen_loss.item(),
+                    student_gen_loss.item(),
+                    tan_loss.item(), 
+                    sim_loss.item()
                 )
             )
             pbar.update()
             
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
-    total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
+    total_teacher_gen_loss /= len(loader)
+    total_student_gen_loss /= len(loader)
     total_tan_loss /= len(loader)
+    total_sim_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'valid/loss': total_loss,
-                'valid/sim_loss': total_sim_loss,
+                'valid/teacher_gen_loss': total_teacher_gen_loss,
+                'valid/student_gen_loss': total_student_gen_loss,
                 'valid/tan_loss': total_tan_loss,
-                'valid/dialog_loss': total_dialog_loss,
-                'valid/caption_loss': total_caption_loss,
+                'valid/sim_loss': total_sim_loss
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        phase, epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+
+    print('{:<5} {}, tg: {:.3f}, sg: {:.3f}, tan:{:.3f}, sim:{:.3f}'.format(
+        'valid', epoch, 
+        total_teacher_gen_loss,
+        total_student_gen_loss,
+        total_tan_loss, 
+        total_sim_loss
     ))
 
     return total_loss
@@ -623,6 +557,7 @@ def validation_1by1_loop(cfg, model, loader, epoch):
     sent_start_idx = loader.dataset.sent_start_idx
     sent_end_idx = loader.dataset.sent_end_idx
     phase = loader.dataset.phase
+    cls_idx = loader.dataset.cls_idx
     # feature_names = loader.dataset.feature_names
     
     reference_paths = cfg.reference_paths
@@ -635,16 +570,20 @@ def validation_1by1_loop(cfg, model, loader, epoch):
 
         if cfg.decoding_method == 'greedy':
             ints_stack_list = greedy_decoder(
-                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
+                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cls_idx, cfg.modality,
                 sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
             )
         elif cfg.decoding_method == 'topk_topp':
             ints_stack_list = topk_topp_decoder(
-                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
+                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cls_idx, cfg.modality,
                 sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
                 topk=cfg.topk, topp=cfg.topp
             )
-
+        elif cfg.decoding_method == 'beam_search':
+            ints_stack_list = beam_search_decoder(
+                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cls_idx, cfg.modality,
+                sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
+            )
 
         input_lengths = torch.sum(mask(batch['feature_stacks']['rgb'][:, :, 0], None, pad_idx), dim=-1).cpu().view(-1)
         list_of_lists_with_filtered_sentences = [[] for _ in range(len(ints_stack_list[0][0]))]
@@ -713,52 +652,36 @@ def validation_1by1_loop(cfg, model, loader, epoch):
                 })
             predictions['dialogs'].append({'image_id': video_id, 'dialog': segment})
 
-    if cfg.log_path is None:
-        return None
-    else:
+    # if cfg.log_path is None:
+    #     return None
+    # else:
         # SAVING THE RESULTS IN A JSON FILE
-        if cfg.procedure == 'train_test':
-            save_filename = f'captioning_results_{phase}_e{epoch}.json'
-        else:
-            save_filename = f'captioning_results_{phase}.json'
-        submission_path = os.path.join(cfg.log_path, save_filename)
+    if cfg.procedure == 'train_test':
+        save_filename = f'captioning_results_{phase}_e{epoch}.json'
+    else:
+        save_filename = f'captioning_results_{phase}.json'
+    submission_path = os.path.join(cfg.log_path, save_filename)
 
-        # in case TBoard is not defined make logdir
-        os.makedirs(cfg.log_path, exist_ok=True)
+    # in case TBoard is not defined make logdir
+    os.makedirs(cfg.log_path, exist_ok=True)
 
-        # rename if already exists
-        if os.path.exists(submission_path):
-            root, ext = os.path.splitext(submission_path)
-            n = 1
-            while os.path.exists(submission_path):
-                submission_path = f'{root}-{n}{ext}'
-                n += 1
+    # rename if already exists
+    if os.path.exists(submission_path):
+        root, ext = os.path.splitext(submission_path)
+        n = 1
+        while os.path.exists(submission_path):
+            submission_path = f'{root}-{n}{ext}'
+            n += 1
 
-        with open(submission_path, 'w') as outf:
-            json.dump(predictions, outf, indent=2)
-        duration = time.time() - start_timer
-        # blocks the printing
-        with HiddenPrints():
-            val_metrics = AVSD_eval(ground_truth_filenames=reference_paths,
-                                    prediction_filename=submission_path,
-                                    stopwords_filename=cfg.stopwords,
-                                    last_only=cfg.last_only,
-                                    verbose=False).evaluate()
+    with open(submission_path, 'w') as outf:
+        json.dump(predictions, outf, indent=2)
+    duration = time.time() - start_timer
+    # blocks the printing
+    with HiddenPrints():
+        val_metrics = AVSD_eval(ground_truth_filenames=reference_paths,
+                                prediction_filename=submission_path,
+                                stopwords_filename=cfg.stopwords,
+                                last_only=cfg.last_only,
+                                verbose=False).evaluate()
 
-<<<<<<< HEAD
-        return val_metrics, duration
-=======
-        return val_metrics, duration
-
-
-
-# Q: is that a man in the video ? A: yes , it is a man 
-# Q: is he the only person in the video ? A: yes , from beginning to end he is the only one . 
-# Q: where is he ? A: he is in what looks like a bedroom 
-# Q: what is he doing ? A: he is wiping his head with a towel 
-# Q: what does he do after that ? A: he removes his jacket and puts it down 
-# Q: does he sit the entire time ? A: no , when he walks into the room , he takes the towel from his closet , then removes his jacket , sits on the bed . soon he gets up , puts the towel away and puts his jacket on . 
-# Q: does he move fast or slow ? A: he is quite slow , never seems to be in a hurry 
-# Q: does he smile or laugh ? A: no , he does not show any emotions throughout the video 
-# Q: can you hear any noise ? A: no , there is no noise from people or from television
->>>>>>> 77e77b40aeeb3b1923d7fbad3ca64895d5e70e6c
+    return val_metrics, duration

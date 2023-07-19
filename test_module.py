@@ -1,19 +1,49 @@
-# import torch
+# import torch.nn as nn
 
-# def get_sent_indices(text_indices, sent_start_idx=0, sent_end_idx=1):
-#     sent_indices = (text_indices == sent_start_idx).long() 
-#     for i in range(1, text_indices.size()[1]):
-#         sent_indices[:, i] += sent_indices[:, i-1]
-#     sent_indices -= 1
-#     return sent_indices
-
-
-# def get_mask(text_indices, sent_indices):
-#     bs, seq_len = text_indices.size()
-#     mask = torch.ones((seq_len, seq_len), dtype=torch.bool).triu(1)
-#     for i in 
-
+# class GRU_Linear(nn.Module):
+#     def __init__(self,):
+#         super().__init__()
+#         self.gru = nn.GRU(1, 1)
+#         self.linear = nn.Linear(1, 1)
     
+#     def forward(self, x):
+#         x = x.unsqueeze(-1)
+#         x, _ = self.gru(x)
+#         x = self.linear(x)
+#         return x.squeeze(-1)
+
+# class TransformerEncoderClassifier(nn.Module):
+#     def __init__(self, emb_dim):
+#         super().__init__()
+#         self.emb_dim = emb_dim
+#         self.transformer = nn.TransformerEncoderLayer(emb_dim, 8)
+#         self.linear = nn.Linear(emb_dim, 1)
     
 
+# class Bert(nn.Module):
+#     def __init__(self, cfg):
+#         super().__init__()
+#         self.bert = BertModel.from_pretrained(cfg.bert_model)
+#         self.linear = nn.Linear(self.bert.config.hidden_size, 1)
+
+#     def forward(self, input_ids, attention_mask):
+#         outputs = self.bert(input_ids, attention_mask=attention_mask)
+#         pooled_output = outputs[1]
+#         logits = self.linear(pooled_output)
+#         return logits
+
+def two_sum(a, b):
+    """Sum of two numbers
+    Parameters
+    ----------
+    a : int
+        first number
+    b : int
+        second number
+        
+    Returns
+    -------
+    int
+        sum of a and b"""
+    return a + b
 

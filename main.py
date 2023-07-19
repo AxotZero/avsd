@@ -6,11 +6,28 @@ from utilities.config_constructor import Config
 from scripts.train_captioning_module import train_cap
 from scripts.eval_captioning_module import eval_cap
 
+import random
+import numpy as np
+
+
+def seed_everything(seed=0):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 def main(cfg):
+    seed_everything(2626)
     torch.multiprocessing.set_sharing_strategy('file_system')
     if 'train' in cfg.procedure:
         train_cap(cfg)
     if 'test' in cfg.procedure:
+        if 'train' not in cfg.procedure:
+            cfg.wandb = False
         eval_cap(cfg)
 
 
@@ -69,13 +86,13 @@ def get_parser():
     parser.add_argument('--num_workers', type=int, default=0, help='number of num_workers')
     parser.add_argument('--one_by_one_starts_at', type=int, default=1,
                         help='# of epochs to skip before starting 1-by-1 validation (saves time)')
-    parser.add_argument('--early_stop_after', type=int, default=5,
+    parser.add_argument('--early_stop_after', type=int, default=3,
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument('--key-metric', type=str, default='Bleu_4',
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument(
-        '--smoothing', type=float, default=0.7,
+        '--smoothing', type=float, default=0,
         help='smoothing coeff (= 0 cross ent loss, more -- stronger smoothing) must be in [0, 1]'
     )
     parser.add_argument('--grad_clip', type=float, help='max grad norm for gradients')
@@ -121,7 +138,7 @@ def get_parser():
         '--use_linear_embedder', dest='use_linear_embedder', action='store_true', default=False,
         help='Whether to include a dense layer between the raw features and input to the model'
     )
-    parser.add_argument('--num_head', type=int, default=4, help='number of heads in multiheaded attention')
+    parser.add_argument('--num_head', type=int, default=8, help='number of heads in multiheaded attention')
     parser.add_argument(
         '--d_ff_video', type=int, help='size of the internal layer of PositionwiseFeedForward')
     parser.add_argument(
@@ -150,8 +167,12 @@ def get_parser():
 
     parser.add_argument('--sim_weight', type=float, default=1.0)
     parser.add_argument('--tan_weight', type=float, default=1.0)
-    parser.add_argument('--dialog_weight', type=float, default=1.0)
-    parser.add_argument('--caption_weight', type=float, default=1.0)
+    parser.add_argument('--teacher_weight', type=float, default=1.0)
+    parser.add_argument('--student_weight', type=float, default=1.0)
+    parser.add_argument('--shrank', action='store_true')
+    parser.add_argument('--jst', action='store_true')
+    parser.add_argument('--av_mapping', action='store_true')
+    parser.add_argument('--bimodal_encoder', action='store_true')
 
     
     parser.set_defaults(to_log=True)

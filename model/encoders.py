@@ -112,7 +112,7 @@ class BiModalEncoder(nn.Module):
         layer_AV = BiModalEncoderLayer(d_model_A, d_model_V, d_model, dout_p, H, d_ff_A, d_ff_V)
         self.encoder_AV = LayerStack(layer_AV, N)
 
-    def forward(self, x, masks: dict):
+    def forward(self, a, b, a_mask=None, b_mask=None):
         '''
         Input:
             x (A, V): (B, Sm, D)
@@ -120,9 +120,8 @@ class BiModalEncoder(nn.Module):
         Output:
             (Av, Va): (B, Sm1, Dm1)
         '''
-        A, V = x
 
         # M1m2 (B, Sm1, D), M2m1 (B, Sm2, D) <-
-        Av, Va = self.encoder_AV((A, V), (masks['A_mask'], masks['V_mask']))
+        Av, Va = self.encoder_AV((a, b), (a_mask, b_mask))
 
         return (Av, Va)

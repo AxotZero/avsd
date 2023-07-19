@@ -16,9 +16,8 @@ def attention(Q, K, V, mask, dropout=None, get_attw=False):
     sm_input = QKt / np.sqrt(d_k)
     
     if mask is not None:
-        while len(mask.size()) < len(sm_input.size()):
-            mask = mask.unsqueeze(0)
-        sm_input = sm_input.masked_fill(mask, -float('inf'))
+        
+        sm_input = sm_input.masked_fill(mask == 0, -float('inf'))
 
     softmax = F.softmax(sm_input, dim=-1)
     out = softmax.matmul(V)
@@ -52,12 +51,11 @@ class MultiheadedAttention(nn.Module):
 
         self.linear_Q2d = nn.Linear(self.d_model_Q, self.d_model)
         self.linear_K2d = nn.Linear(self.d_model_K, self.d_model)
-        self.linear_V2d = nn.Linear(self.d_model_V, self.d_model)
-        self.linear_d2Q = nn.Linear(self.d_model, self.d_model_Q)
+        self.linear_V2d = nn.Linear(self.d_model_V, self.d_model_V)
+        self.linear_d2Q = nn.Linear(self.d_model_V, self.d_model_Q)
 
         self.dropout = nn.Dropout(self.dout_p)
         self.keep_attw = keep_attw
-        self.attw = None
         assert self.d_model % H == 0
 
     def forward(self, Q, K, V, mask):
@@ -85,10 +83,8 @@ class MultiheadedAttention(nn.Module):
         #     mask = mask.unsqueeze(1)
 
         # (B, H, Sq, d_k) <- (B, H, Sq, d_k), (B, H, Sk, d_k), (B, H, Sv, d_k), Sk = Sv
-        if self.keep_attw:
-            Q, self.attw = attention(Q, K, V, mask, self.dropout, get_attw=True)
-        else:
-            Q = attention(Q, K, V, mask, self.dropout)
+        Q = attention(Q, K, V, mask, self.dropout)
+        
         # (B, Sq, D) <- (B, H, Sq, d_k)
         Q = Q.transpose(-3, -2).contiguous().view(B, Sq, self.d_model)
         # (B, Sq, Dq)
