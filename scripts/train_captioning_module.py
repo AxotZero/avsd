@@ -20,7 +20,7 @@ def train_cap(cfg):
     if cfg.wandb:
         wandb.init(
             project='avsd', 
-            group='ablation_256',
+            group='one_qa_ablation',
             # job_type=cfg.exp_name,
             name=cfg.exp_name,
             config = {

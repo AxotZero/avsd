@@ -115,6 +115,18 @@ class MemoryGate(nn.Module):
         return x
 
 
+class UpdateGate:
+    def forward(x, memory):
+        tmp = concat([x, memory], axis=-1)
+        tmp = mlp(x)
+        z = sigmoid(x)
+        out = (1-z) * x + z * memory
+        return out
+
+
+
+
+
 class CrossDecoderLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -129,7 +141,10 @@ class CrossDecoderLayer(nn.Module):
         self.cross_attn = CrossAttention(cfg)
         self.dropout = nn.Dropout(cfg.dout_p)
         self.norm = nn.LayerNorm(cfg.d_model)
-        self.memory_gate = MemoryGate(cfg)
+        if cfg.no_update_gate:
+            self.memory_gate = None
+        else:
+            self.memory_gate = MemoryGate(cfg)
 
         # ff
         self.ff = PositionwiseFeedForward(cfg.d_model, cfg.d_model*2, dout_p=cfg.dout_p)
@@ -151,8 +166,12 @@ class CrossDecoderLayer(nn.Module):
 
         # cross_attn + res
         res, attn = self.cross_attn(text, av_feat, attn_sent_index)
-        memory_ratio = self.memory_gate(text, res)
-        text = self.norm((1-memory_ratio) * text + memory_ratio * res)
+        if self.memory_gate is not None:
+            memory_ratio = self.memory_gate(text, res)
+            text = self.norm((1-memory_ratio) * text + memory_ratio * res)
+        else:
+            memory_ratio = torch.ones(*text.size()[:-1], 1).to(text.get_device())
+            text = self.norm(text + res)
 
         # ff + res
         text = self.res2(text, self.ff)

@@ -8,6 +8,7 @@ from scripts.eval_captioning_module import eval_cap
 
 import random
 import numpy as np
+import os
 
 
 def seed_everything(seed=0):
@@ -19,9 +20,9 @@ def seed_everything(seed=0):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
 def main(cfg):
     seed_everything(2626)
+    
     torch.multiprocessing.set_sharing_strategy('file_system')
     if 'train' in cfg.procedure:
         train_cap(cfg)
@@ -86,7 +87,7 @@ def get_parser():
     parser.add_argument('--num_workers', type=int, default=0, help='number of num_workers')
     parser.add_argument('--one_by_one_starts_at', type=int, default=1,
                         help='# of epochs to skip before starting 1-by-1 validation (saves time)')
-    parser.add_argument('--early_stop_after', type=int, default=5,
+    parser.add_argument('--early_stop_after', type=int, default=3,
                         help='number of epochs to wait for best metric to change before stopping')
     parser.add_argument('--key-metric', type=str, default='Bleu_4',
                         choices=['Bleu_4', 'METEOR', 'ROUGE_L', 'CIDEr', 'IoU-1', 'IoU-2'],
@@ -96,9 +97,9 @@ def get_parser():
         help='smoothing coeff (= 0 cross ent loss, more -- stronger smoothing) must be in [0, 1]'
     )
     parser.add_argument('--grad_clip', type=float, help='max grad norm for gradients')
-    parser.add_argument('--pretrained_prop_model_path', type=str, 
+    parser.add_argument('--pretrained_prop_model_path', type=str, default='',
                         help='path to pre-trained cap model .pt')
-    parser.add_argument('--pretrained_cap_model_path', type=str,
+    parser.add_argument('--pretrained_cap_model_path', type=str, default='',
                         help='path to pre-trained cap model .pt')
     parser.add_argument('--region_std_coeff', default=1.0, type=float,
                         help='reasoning region is decided based on the most attended frame +/- std * coeff')
@@ -162,8 +163,8 @@ def get_parser():
     parser.add_argument('--max_iou', type=float, default=1.0)
     parser.add_argument('--num_gru_layers', type=int, default=1)
     parser.add_argument('--decoding_method', type=str, default='greedy')
-    parser.add_argument('--topp', type=float, default=0.92)
-    parser.add_argument('--topk', type=int, default=8)
+    parser.add_argument('--length_penalty', type=float, default=0.8)
+    parser.add_argument('--beam_size', type=int, default=6)
 
     parser.add_argument('--sim_weight', type=float, default=1.0)
     parser.add_argument('--tan_weight', type=float, default=1.0)
@@ -172,7 +173,7 @@ def get_parser():
     parser.add_argument('--shrank', action='store_true')
     parser.add_argument('--av_mapping', action='store_true')
     parser.add_argument('--bimodal_encoder', action='store_true')
-
+    parser.add_argument('--no_update_gate', action='store_true')
     
     parser.set_defaults(to_log=True)
     return parser
@@ -181,7 +182,7 @@ def get_parser():
 if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
-    pprint(vars(args))
+    # pprint(vars(args))
     cfg = Config(args)
 
     

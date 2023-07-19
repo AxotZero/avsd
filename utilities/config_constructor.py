@@ -123,8 +123,8 @@ class Config(object):
         self.max_iou = args.max_iou
         self.num_gru_layers = args.num_gru_layers
         self.decoding_method = args.decoding_method
-        self.topp = args.topp
-        self.topk = args.topk
+        self.length_penalty = args.length_penalty
+        self.beam_size = args.beam_size
 
         self.sim_weight = args.sim_weight
         self.tan_weight = args.tan_weight
@@ -133,3 +133,4 @@ class Config(object):
         self.shrank = args.shrank
         self.av_mapping = args.av_mapping
         self.bimodal_encoder = args.bimodal_encoder
+        self.no_update_gate = args.no_update_gate

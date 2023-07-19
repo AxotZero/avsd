@@ -111,10 +111,11 @@ class AVSDTan(nn.Module):
 
             sent_indices = self.get_sent_indices(dialog_x)
             embs, attn_w = self.cross_decoder(embs, 
-                                              map2d, 
-                                              pad_mask, 
-                                              text_mask,
-                                              sent_indices)
+                                            map2d, 
+                                            pad_mask, 
+                                            text_mask,
+                                            sent_indices)
+            
             gen_dialog = self.generator(embs)
 
         ### write loss func

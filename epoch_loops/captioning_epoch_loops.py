@@ -100,7 +100,8 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
                     batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                     dialog_x=trg, map2d=map2d, ret_map2d=True, compute_loss=False
                 )
-                preds[:, :, 0] = float('-inf')  # suppress UNK
+                preds[:, :, [0, sent_start_idx, sent_end_idx]] = float('-inf')  # suppress UNK
+                # preds[:, :, 0] = float('-inf')  # suppress UNK
                 next_word = torch.where(completeness_mask==0,
                                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
                                         end_idx_)
@@ -114,113 +115,10 @@ def greedy_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
     return sources, targets, attweights
 
 
-def topk_topp_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
-                      sent_start_idx=None, sent_end_idx=None, last_only=False, 
-                      topk=0, topp=0.0, repetition_penalty=2.0, filter_value=0):
-    assert model.training is False, 'call model.eval first'
-    feature_stacks = batch['feature_stacks']
-    dialog_idx = batch['dialog']
-    start_pos, end_pos = get_context_positions(dialog_idx, sent_start_idx, sent_end_idx)
-    sources = []
-    targets = []
-    attweights = []
-    with torch.no_grad():
-
-        if 'audio' in modality:
-            B, _Sa_, _Da_ = feature_stacks['audio'].shape
-            device = feature_stacks['audio'].device
-        elif modality == 'video':
-            B, _Sv_, _Drgb_ = feature_stacks['rgb'].shape
-            device = feature_stacks['rgb'].device
-        else:
-            raise Exception(f'Unknown modality: {modality}')
-        
-        # for each QA turn, only last if last_only
-        
-        s = 0 if not last_only else start_pos.size(-1)-1
-        for t in range(s, start_pos.size(1)):
-            # store source information
-            max_src_context_len = int(torch.max(end_pos[:, t] - start_pos[:, t]))
-            src = torch.full((B, max_src_context_len), end_idx, dtype=torch.long, device=device)
-            for b, (s, e) in enumerate(zip(start_pos[:, t], end_pos[:, t])):
-                if e >= 0:
-                    src[b, :e-s] = dialog_idx[b, s:e]
-            sources.append(src)
-            # prepare context used for teacher forcing
-            max_context_len = int(torch.max(end_pos[:, t])) + 1
-            trg = torch.full((B, max_context_len), pad_idx, dtype=torch.long, device=device)
-            completeness_mask = torch.zeros(B, 1).byte().to(device)
-            current_position = torch.zeros(B, dtype=torch.long, device=device)
-            for b, e in enumerate(end_pos[:, t]):
-                if e >= 0:
-                    trg[b, :e+1] = dialog_idx[b, :e+1]
-                    current_position[b] = e
-                else: # no more sentences
-                    completeness_mask[b] = 1
-            # greedy decoding
-            out = torch.full((B, 1), start_idx, dtype=torch.long, device=device)
-            pad_idx_ = torch.full((B, 1), pad_idx, dtype=torch.long, device=device)
-            end_idx_ = torch.full((B, 1), end_idx, dtype=torch.long, device=device)
-            
-            batch_indices = torch.arange(B, dtype=torch.long, device=device)
-            map2d = None
-            while (out.size(-1) <= max_len) and (not completeness_mask.all()):
-                
-                # masks = make_masks(feature_stacks, trg, modality, pad_idx)
-                # pad_mask, text_mask = make_text_masks(trg, pad_idx)
-                # preds, attn, map2d = model(feature_stacks, , pad_mask, text_mask, )
-
-                preds, attn, map2d = model(
-                    batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
-                    dialog_x=trg, map2d=map2d, ret_map2d=True, compute_loss=False
-                )
-                preds[:, :, [0, sent_start_idx, sent_start_idx]] = float('-inf')  # suppress UNK
-
-
-                # filter topk
-                preds = preds[batch_indices, current_position]
-                preds = F.softmax(preds, dim=-1)
-
-                for index in range(B):
-                    for token_id in set(out[index].cpu().numpy()):
-                        preds[index][token_id] /= repetition_penalty
-                preds = preds / preds.sum(-1)
-                if topk > 0:
-                    for pred in preds:
-                        indices_to_remove = pred < torch.topk(pred, topk)[0][..., -1, None]
-                        pred[indices_to_remove] = filter_value  # 对于topk之外的其他元素的logits值设为负无穷
-                # filter topp
-                if topp > 0.0:
-                    sorted_logits, sorted_indices = torch.sort(preds, descending=True, dim=-1)  # 对logits进行递减排序
-                    cumulative_probs = torch.cumsum(sorted_logits, dim=-1)
-
-                    # Remove tokens with cumulative probability above the threshold
-                    sorted_indices_to_remove = cumulative_probs > topp
-                    # Shift the indices to the right to keep also the first token above the threshold
-                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-                    sorted_indices_to_remove[..., 0] = 0
-                    for index, pred in enumerate(preds):
-                        indices_to_remove = sorted_indices[index][sorted_indices_to_remove[index]]
-                        pred[indices_to_remove] = filter_value
-                
-                # select word
-                next_word = torch.where(completeness_mask==0,
-                                        torch.multinomial(preds, num_samples=1),
-                                        end_idx_)
-                
-                out = torch.cat([out, next_word], dim=-1)
-                trg = torch.cat([trg, pad_idx_], dim=-1)
-                current_position += 1
-                trg[batch_indices, current_position] = next_word[:, 0]
-                completeness_mask = completeness_mask | torch.eq(next_word, end_idx_).byte()
-            targets.append(out)
-            attweights.append(attn[:, -1])
-    return sources, targets, attweights
-
 
 def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, modality,
                            sent_start_idx=None, sent_end_idx=None, last_only=False,
-                           beam_size = 5, length_penalty = 0.3):
+                           beam_size = 6, length_penalty = 0.75):
     assert model.training is False, 'call model.eval first'
     feature_stacks = batch['feature_stacks']
     dialog_idx = batch['dialog']
@@ -285,7 +183,8 @@ def beam_search_decoder(model, batch, max_len, start_idx, end_idx, pad_idx, moda
                     dialog_x=dialog_x, map2d=map2d, ret_map2d=True, compute_loss=False
                 )
                 # preds: bs, seq_len, num_vocab
-                preds[:, :, 0] = float('-inf')  # suppress UNK
+                # preds[:, :, 0] = float('-inf')  # suppress UNK
+                preds[:, :, [0, sent_start_idx, sent_end_idx]] = float('-inf')
                 # next_word = torch.where(completeness_mask==0,
                 #                         preds[batch_indices, current_position].max(dim=-1)[1].unsqueeze(1),
                 #                         end_idx_)
@@ -650,16 +549,11 @@ def validation_1by1_loop(cfg, model, loader, epoch):
                 model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
                 sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
             )
-        elif cfg.decoding_method == 'topk_topp':
-            ints_stack_list = topk_topp_decoder(
-                model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
-                sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
-                topk=cfg.topk, topp=cfg.topp
-            )
         elif cfg.decoding_method == 'beam_search':
             ints_stack_list = beam_search_decoder(
                 model, batch, cfg.max_len, start_idx, end_idx, pad_idx, cfg.modality,
                 sent_start_idx=sent_start_idx, sent_end_idx=sent_end_idx, last_only=cfg.last_only,
+                beam_size=cfg.beam_size, length_penalty=cfg.length_penalty
             )
 
 

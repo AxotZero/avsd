@@ -16,12 +16,15 @@ import wandb
 def eval_cap_helper(cfg, test_pkl, dstc=7):
     if dstc == 7:
         cfg.reference_paths = ['./data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json']
-        cfg.test_meta_path = './data/dstc10_test2.csv'
+        cfg.test_meta_path = './data/dstc7_test.csv'
+    elif dstc == 8:
+        cfg.reference_paths = ['./data/mock_test_set4DSTC10-AVSD_from_DSTC8_multiref.json']
+        cfg.test_meta_path = './data/dstc8_test.csv'
     else:
         cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
         cfg.test_meta_path = './data/dstc10_test.csv'
 
-    cfg.last_only=True
+    # cfg.last_only=True
     cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
     
     cfg.unfreeze_word_emb = False
@@ -45,6 +48,8 @@ def eval_cap_helper(cfg, test_pkl, dstc=7):
 
     cap_model_cpt = torch.load(cfg.pretrained_cap_model_path, map_location='cpu')
     model_cfg = cap_model_cpt['config']
+    if not hasattr(model_cfg, 'no_update_gate'):
+        setattr(model_cfg, 'no_update_gate', False)
     # setattr(model_cfg, 'jst', True)
     model = AVSDTan(model_cfg, test_dataset)
     
@@ -72,13 +77,13 @@ def eval_cap_helper(cfg, test_pkl, dstc=7):
 
 def eval_cap(cfg):
     test_pkl = load_pickle(f'{cfg.feature_dir}/test.pkl')
-    cfg.decoding_method = 'greedy'
-    eval_cap_helper(cfg, test_pkl, dstc=7)
-    eval_cap_helper(cfg, test_pkl, dstc=10)
+    # cfg.decoding_method = 'greedy'
+    # eval_cap_helper(cfg, test_pkl, dstc=7)
+    # eval_cap_helper(cfg, test_pkl, dstc=10)
 
     cfg.decoding_method = 'beam_search'
-    eval_cap_helper(cfg, test_pkl, dstc=7)
+    # eval_cap_helper(cfg, test_pkl, dstc=7)
+    # eval_cap_helper(cfg, test_pkl, dstc=8)
     eval_cap_helper(cfg, test_pkl, dstc=10)
-
 
                 
