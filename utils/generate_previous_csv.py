@@ -36,10 +36,10 @@ def generate_csv(duration_file, inp_json, phase, output_csv, num_prev='1'):
             d['phase'] = phase
 
             dialogs = item1['dialog']
-            # if phase in ('train', 'val'):
-            start_idx_e = num_prev+1
-            # else:
-            #     start_idx_e = len(dialogs)
+            if phase in ('train', 'val'):
+                start_idx_e = num_prev+1
+            else:
+                start_idx_e = len(dialogs)
 
             for idx_e in range(start_idx_e, len(dialogs)+1):
                 tmp = deepcopy(d)

@@ -117,9 +117,15 @@ def get_parser():
     ## MODEL
     parser.add_argument('--model', type=str, default='av_transformer',
                         choices=['transformer', 'av_transformer'], help='caption model type')
-    parser.add_argument('--dout_p', type=float, default=0.1, help='dropout probability: in [0, 1]')
-    parser.add_argument('--num_encoder_layers', type=int, default=2, help='number of layers in a model')
-    parser.add_argument('--num_decoder_layers', type=int, default=2, help='number of layers in a model')
+    parser.add_argument('--dout_p', type=float, default=0.1, 
+        help='dropout probability: in [0, 1]'
+    )
+    parser.add_argument('--num_encoder_layers', type=int, default=2, 
+        help='number of layers in a model'
+    )
+    parser.add_argument('--num_decoder_layers', type=int, default=2, 
+        help='number of layers in a model'
+    )
     parser.add_argument(
         '--d_model', type=int, default=1024,
         help='the internal space in the multi-headed attention (when input dims of Q, K, V differ)')
@@ -139,41 +145,81 @@ def get_parser():
         '--use_linear_embedder', dest='use_linear_embedder', action='store_true', default=False,
         help='Whether to include a dense layer between the raw features and input to the model'
     )
-    parser.add_argument('--num_head', type=int, default=4, help='number of heads in multiheaded attention')
-    parser.add_argument(
-        '--d_ff_video', type=int, help='size of the internal layer of PositionwiseFeedForward')
-    parser.add_argument(
-        '--d_ff_audio', type=int, help='size of the internal layer of PositionwiseFeedForward')
-    parser.add_argument(
-        '--d_ff_caps', type=int, help='size of the internal layer of PositionwiseFeedForward')
-
+    parser.add_argument('--num_head', type=int, default=4, 
+        help='number of heads in multiheaded attention'
+    )
+    parser.add_argument('--d_ff_video', type=int, 
+        help='size of the internal layer of PositionwiseFeedForward'
+    )
+    parser.add_argument('--d_ff_audio', type=int, 
+        help='size of the internal layer of PositionwiseFeedForward'
+    )
+    parser.add_argument('--d_ff_caps', type=int, 
+        help='size of the internal layer of PositionwiseFeedForward'
+    )
     ## DEBUGGING
     parser.add_argument('--debug', dest='debug', action='store_true', default=False,
-                        help='runs test() instead of main()')
+        help='load the small debug training and validation set, useful for duebigging'
+    )
     parser.add_argument('--dont_log', dest='to_log', action='store_false',
-                        help='Prevent logging in the experiment.')
-    parser.add_argument('--feature_dir', type=str, default='./data/features/')
-    parser.add_argument('--num_seg', type=int, default=64)
-    parser.add_argument('--cnn_kernel_size', type=int, default=9)
-    parser.add_argument('--num_cnn_layer', type=int, default=4)
-    parser.add_argument('--seg_method', type=str, choices=['mean', 'max', 'sample'], default='mean')
-    parser.add_argument('--wandb', action='store_true')
-    parser.add_argument('--no_sen_fusion', action='store_true')
-    parser.add_argument('--min_iou', type=float, default=0.5)
-    parser.add_argument('--max_iou', type=float, default=1.0)
-    parser.add_argument('--num_gru_layers', type=int, default=1)
-    parser.add_argument('--decoding_method', type=str, default='greedy')
-    parser.add_argument('--length_penalty', type=float, default=0.8)
-    parser.add_argument('--beam_size', type=int, default=6)
-
-    parser.add_argument('--sim_weight', type=float, default=1.0)
-    parser.add_argument('--tan_weight', type=float, default=1.0)
-    parser.add_argument('--dialog_weight', type=float, default=1.0)
-    parser.add_argument('--caption_weight', type=float, default=1.0)
-    parser.add_argument('--shrank', action='store_true')
-    parser.add_argument('--av_mapping', action='store_true')
-    parser.add_argument('--bimodal_encoder', action='store_true')
-    parser.add_argument('--no_update_gate', action='store_true')
+        help='Prevent logging in the experiment.'
+    )
+    parser.add_argument('--feature_dir', type=str, default='./data/features/',
+        help='folder for pretrained features'
+    )
+    parser.add_argument('--num_seg', type=int, default=64,
+        help='number of segment for sampling'
+    )
+    parser.add_argument('--cnn_kernel_size', type=int, default=9,
+        help='param for 2D-Map, useless if --no_sen_fusion is true'
+    )
+    parser.add_argument('--num_cnn_layer', type=int, default=4,
+        help='param for 2D-Map, useless if --no_sen_fusion is true'
+    )
+    parser.add_argument('--seg_method', type=str, choices=['mean', 'max', 'sample'], default='sample',
+        help='the method for random sampling'
+    )
+    parser.add_argument('--wandb', action='store_true',
+        help='whether to enable wandb'
+    )
+    parser.add_argument('--no_sen_fusion', action='store_true',
+        help='whether to not to do the CNN operation for 2D-Map'
+    )
+    parser.add_argument('--min_iou', type=float, default=0.5,
+        help='min_iou of iou_loss'
+    )
+    parser.add_argument('--max_iou', type=float, default=1.0,
+        help='max_iou of iou_loss'
+    )
+    parser.add_argument('--num_gru_layers', type=int, default=1,
+        help='number of layer of gru'
+    )
+    parser.add_argument('--decoding_method', type=str, choices=['greedy', 'beam_search'], default='greedy',
+        help='decoding method for inference'
+    )
+    parser.add_argument('--length_penalty', type=float, default=0.8,
+        help='param for decoding_method: beam_search'
+    )
+    parser.add_argument('--beam_size', type=int, default=6,
+        help='param for decoding_method: beam_search'
+    )
+    parser.add_argument('--tan_weight', type=float, default=1.0,
+        help='loss weight of iou loss'
+    )
+    parser.add_argument('--dialog_weight', type=float, default=1.0,
+        help='loss weight for generation loss'
+    )
+    parser.add_argument('--av_mapping', action='store_true',
+        help="""2D-Map setting, set to ture if you want to cancel  attentional fusion for audio-visual signal 
+                and replaced by concat + mlp """
+    )
+    parser.add_argument('--bimodal_encoder', action='store_true',
+        help="""Cross Modal encoder setting, set to ture if you want to replace bottleneck transformer
+                to bi-modal encoder"""
+    )
+    parser.add_argument('--no_update_gate', action='store_true',
+        help='set to true to not to use update gate'
+    )
     
     parser.set_defaults(to_log=True)
     return parser

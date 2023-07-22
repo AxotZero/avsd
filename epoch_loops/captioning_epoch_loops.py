@@ -339,9 +339,7 @@ def batch_to_device(batch, device):
 def training_loop(cfg, model, loader, optimizer, epoch):
     model.train()
     total_loss = 0
-    total_sim_loss = 0
     total_dialog_loss = 0
-    total_caption_loss = 0
     total_tan_loss = 0
 
     loader.dataset.update_iterator()
@@ -359,8 +357,7 @@ def training_loop(cfg, model, loader, optimizer, epoch):
             loader.dataset.pad_idx
         )
 
-
-        sim_loss, tan_loss, dialog_loss, caption_loss = model(
+        tan_loss, dialog_loss = model(
             batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
             dialog_x, dialog_y,
             batch['tan_label'], batch['tan_mask'],
@@ -368,16 +365,12 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         )
 
         # multi device
-        sim_loss = sim_loss.mean()
         tan_loss = tan_loss.mean()
         dialog_loss = dialog_loss.mean()
-        caption_loss = caption_loss.mean()
 
         loss = (
-            cfg.sim_weight * sim_loss + 
             cfg.tan_weight * tan_loss +
-            cfg.dialog_weight * dialog_loss +
-            cfg.caption_weight * caption_loss
+            cfg.dialog_weight * dialog_loss
         )
         loss.backward()
 
@@ -387,53 +380,42 @@ def training_loop(cfg, model, loader, optimizer, epoch):
         optimizer.step()
 
         total_loss += loss.item()
-        total_sim_loss += sim_loss.item()
         total_dialog_loss += dialog_loss.item()
-        total_caption_loss += caption_loss.item()
         total_tan_loss += tan_loss.item()
 
         pbar.set_description(
-            '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+            '{:<5} {}, tan:{:.3f}, dig:{:.3f}'.format(
                 'train', epoch, 
-                sim_loss.item(), 
                 tan_loss.item(), 
-                caption_loss.item(), 
                 dialog_loss.item()
             )
         )
         pbar.update()
 
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
     total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
     total_tan_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'train/loss': total_loss,
-                'train/sim_loss': total_sim_loss,
                 'train/tan_loss': total_tan_loss,
                 'train/dialog_loss': total_dialog_loss,
-                'train/caption_loss': total_caption_loss,
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('train {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+    print('train {}, tan:{:.3f}, dig:{:.3f}'.format(
+        epoch, total_tan_loss, total_dialog_loss
     ))
             
 
 def validation_next_word_loop(cfg, model, loader, epoch):
     model.eval()
     total_loss = 0
-    total_sim_loss = 0
     total_dialog_loss = 0
-    total_caption_loss = 0
     total_tan_loss = 0
 
     loader.dataset.update_iterator()
@@ -454,65 +436,51 @@ def validation_next_word_loop(cfg, model, loader, epoch):
         )
 
         with torch.no_grad():
-            sim_loss, tan_loss, dialog_loss, caption_loss = model(
+            tan_loss, dialog_loss = model(
                 batch['feature_stacks'], batch['visual_mask'], batch['audio_mask'],
                 dialog_x, dialog_y,
                 batch['tan_label'], batch['tan_mask'],
                 compute_loss=True
             )
 
-            # multi device
-            sim_loss = sim_loss.mean()
             tan_loss = tan_loss.mean()
             dialog_loss = dialog_loss.mean()
-            caption_loss = caption_loss.mean()
 
             loss = (
-                cfg.sim_weight * sim_loss + 
                 cfg.tan_weight * tan_loss +
-                cfg.dialog_weight * dialog_loss +
-                cfg.caption_weight * caption_loss
+                cfg.dialog_weight * dialog_loss
             )
 
             total_loss += loss.item()
-            total_sim_loss += sim_loss.item()
             total_dialog_loss += dialog_loss.item()
-            total_caption_loss += caption_loss.item()
             total_tan_loss += tan_loss.item()
 
             pbar.set_description(
-                '{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
+                '{:<5} {}, tan:{:.3f}, dig:{:.3f}'.format(
                     phase, epoch, 
-                    sim_loss.item(), 
                     tan_loss.item(), 
-                    caption_loss.item(), 
                     dialog_loss.item()
                 )
             )
             pbar.update()
             
     total_loss /= len(loader)
-    total_sim_loss /= len(loader)
     total_dialog_loss /= len(loader)
-    total_caption_loss /= len(loader)
     total_tan_loss /= len(loader)
 
     if cfg.wandb:
         wandb.log(
             {
                 'valid/loss': total_loss,
-                'valid/sim_loss': total_sim_loss,
                 'valid/tan_loss': total_tan_loss,
                 'valid/dialog_loss': total_dialog_loss,
-                'valid/caption_loss': total_caption_loss,
             },
             step=epoch
         )
 
     time.sleep(1)
-    print('{:<5} {}, sim:{:.3f}, tan:{:.3f}, cap:{:.3f}, dig:{:.3f}'.format(
-        phase, epoch, total_sim_loss, total_tan_loss, 
-        total_caption_loss, total_dialog_loss
+    print('{:<5} {}, tan:{:.3f}, dig:{:.3f}'.format(
+        phase, epoch, total_tan_loss, total_dialog_loss
     ))
 
     return total_loss

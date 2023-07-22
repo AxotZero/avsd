@@ -120,14 +120,9 @@ class AVSDTan(nn.Module):
 
         ### write loss func
         if compute_loss:
-            # sim_loss = self.sim_loss(video_emb, caption_emb)
             tan_loss = self.tan_loss(attn_w, tan_target, tan_mask)
             dialog_loss = self.gen_loss(gen_dialog, dialog_y)
-            # caption_loss = self.gen_loss(gen_caption, caption_y)
-            caption_loss = torch.tensor(0.0).to(dialog_loss.get_device())
-            sim_loss = torch.tensor(0.0).to(dialog_loss.get_device())
-            return sim_loss, tan_loss, dialog_loss, caption_loss
-            # return None, None, dialog_loss, caption_loss
+            return tan_loss, dialog_loss
 
         if ret_map2d:
             return gen_dialog, attn_w, map2d

@@ -34,10 +34,8 @@ batch_size=16 # per device
 num_workers=4
 weight_decay=0.001
 lr=0.0003
-sim_weight=0
 tan_weight=1
 dialog_weight=0.5
-caption_weight=0
 min_freq_caps=2
 epoch_num=50
 one_by_one_starts_at=200
@@ -63,18 +61,16 @@ train_set=./data/train_set4DSTC8-AVSD+reason.json
 val_set=./data/valid_set4DSTC10-AVSD+reason.json
 test_set=./data/test_set4DSTC10-AVSD_multiref+reason.json
 test_set7=data/mock_test_set4DSTC10-AVSD_from_DSTC7_multiref.json
-test_set8=data/mock_test_set4DSTC10-AVSD_from_DSTC8_multiref.json
 log_dir=./log
 
 # convert data
-# echo "Coverting json files to csv for the tool"
+echo "Coverting json files to csv for the tool"
 generate_csv='utils/generate_previous_csv.py'
 num_prev=0
-# python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv $num_prev
-# python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv $num_prev
+python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv $num_prev
+python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv $num_prev
 python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv $num_prev
-# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set7 test ./data/dstc7_test.csv $num_prev
-# python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set8 test ./data/dstc8_test.csv $num_prev
+python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set7 test ./data/dstc7_test.csv $num_prev
 # return
 
 
@@ -124,10 +120,8 @@ function run_exp(){
     --decoding_method $decoding_method \
     --length_penalty $length_penalty \
     --beam_size $beam_size \
-    --sim_weight $sim_weight \
     --tan_weight $tan_weight \
     --dialog_weight $dialog_weight \
-    --caption_weight $caption_weight \
     --min_freq_caps $min_freq_caps \
     $av_mapping \
     $bimodal_encoder \
@@ -141,9 +135,9 @@ function run_exp(){
 av_mapping=''
 bimodal_encoder=''
 no_update_gate=''
-procedure='test'
+# procedure='test'
 last_only=''
-exp_name="use_all"
+exp_name="use_all2"
 run_exp
 
 

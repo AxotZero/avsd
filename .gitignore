@@ -1,6 +1,6 @@
 log
 log_re
-data
+data/features
 __pycache__
 .vector_cache
 wandb

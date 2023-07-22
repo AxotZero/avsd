@@ -126,11 +126,8 @@ class Config(object):
         self.length_penalty = args.length_penalty
         self.beam_size = args.beam_size
 
-        self.sim_weight = args.sim_weight
         self.tan_weight = args.tan_weight
         self.dialog_weight = args.dialog_weight
-        self.caption_weight = args.caption_weight
-        self.shrank = args.shrank
         self.av_mapping = args.av_mapping
         self.bimodal_encoder = args.bimodal_encoder
         self.no_update_gate = args.no_update_gate

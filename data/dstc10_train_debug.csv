@@ -1,0 +1,101 @@
+video_id	dialog	start	end	duration	seq_start	seq_end	tan_mask	phase	idx
+004QE	Q: is this a man or woman ? A: this person is a woman inside this video . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	0
+004QE	Q: is she young or old ? A: i would say that she is at least inside of her thirties . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	1
+004QE	Q: what part of the house is this being filmed ? A: her very small bathroom is where this takes place . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	2
+004QE	Q: does she turn on the water ? A: no she has nothing to do with the water . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	3
+004QE	Q: what are the items in her hand ? A: she has a mug of a drink in her hand and she also has what appears to be a medicine bottle in the other hand . 	0	30.6	30.6	[[5.391811, 23.861221]]	[[23.861221, 30.6]]	[1]	train	4
+004QE	Q: does she drink from the mug ? A: yes but i don 't think there is anything in the mug . i think she is pretending . 	0	30.6	30.6	[[16.179072]]	[[19.438165]]	[1]	train	5
+004QE	Q: does she take any of the medicine ? A: no she just opens the medicine bottle i don 't see her take anything out . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	6
+004QE	Q: does she appear to be sick ? A: no she isn 't sick but when she takes a sip of the mug her reaction is over the top joy . 	0	30.6	30.6	[[2.832307]]	[[30.6]]	[1]	train	7
+004QE	Q: does she ever leave the bathroom ? A: yes she does leave the bathroom . 	0	30.6	30.6	[[28.748649]]	[[30.6]]	[1]	train	8
+004QE	Q: does she talk to anyone ? A: no she does not talk to anyone . she comes into the bathroom sits down on the toilet . opens up the medicine bottle . drinks a sip from the mug . gets up and leaves . 	0	30.6	30.6	[[0]]	[[30.6]]	[1]	train	9
+00HFP	Q: is this a man in the video ? A: yes the man is the only one . he comes in to the video and he grabs shoes under the desks puts them down kicks them and never puts them on . this is the entire video so read this .. 	0	31.127937	31.127937	[[0, 0, 7.257368, 14.030912, 20.124944, 13.795163]]	[[31.127937, 4.751958, 10.232648, 20.308073, 24.107853, 31.127937]]	[1]	train	10
+00HFP	Q: what room does this take place of ? A: it looks like a bedroom but uncertain . 	0	31.127937	31.127937	[[0]]	[[31.127937]]	[1]	train	11
+00HFP	Q: does the man speak ? A: no one speaks in the video . 	0	31.127937	31.127937	[[0]]	[[31.127937]]	[1]	train	12
+00HFP	Q: does he sneeze or cough ? A: he does not do any of the sneezing or coughing . 	0	31.127937	31.127937	[[0]]	[[31.127937]]	[1]	train	13
+00HFP	Q: what else does he do other then kick his shoes ? A: thats it he drops them before that 	0	31.127937	31.127937	[[13.252403, 16.444953, 19.938357]]	[[15.34874, 21.389057, 23.071047]]	[1]	train	14
+00HFP	Q: does he seem angry ? A: he does not seem angry one bit . 	0	31.127937	31.127937	[[1.823338]]	[[10.650973]]	[1]	train	15
+00HFP	Q: does he hold anything ? A: his shoes before he drops them . 	0	31.127937	31.127937	[[11.154159, 13.855977, 16.274334]]	[[13.855977, 15.534774, 19.95325]]	[1]	train	16
+00HFP	Q: does he eat or drink anything ? A: he does not eat or drink a thing . 	0	31.127937	31.127937	[[0]]	[[31.127937]]	[1]	train	17
+00HFP	Q: so a man is in a bedroom and he takes his shoes from under a desk and he puts them on the floor ? A: this is completely correct . you are on it now . 	0	31.127937	31.127937	[[4.437626, 14.352179]]	[[9.495236, 20.13688]]	[1]	train	18
+00HFP	Q: is there anything i am missing ? A: no you are not missing a thing . great job ! 	0	31.127937	31.127937	[[0]]	[[31.127937]]	[1]	train	19
+00MFE	Q: is there sound in the video ? A: yes , i can hear sound . 	0	20.566667000000002	20.566667000000002	[[0.650551]]	[[20.566667000000002]]	[1]	train	20
+00MFE	Q: is she alone the whole time ? A: yes , she is the only person that i can see in the video . 	0	20.566667000000002	20.566667000000002	[[0.656691]]	[[20.566667000000002]]	[1]	train	21
+00MFE	Q: is she in the room at the beginning ? A: yes she is in the room at the start . 	0	20.566667000000002	20.566667000000002	[[0.635819]]	[[20.566667000000002]]	[1]	train	22
+00MFE	Q: what is she doing when she has her head back and arms up ? A: she is combing her fingers through her hair . 	0	20.566667000000002	20.566667000000002	[[0.868694]]	[[20.566667000000002]]	[1]	train	23
+00MFE	Q: does she take a drink of water from the glass she touches ? A: yes , she takes a drink of water . 	0	20.566667000000002	20.566667000000002	[[1.399343]]	[[20.566667000000002]]	[1]	train	24
+00MFE	Q: what is the black and silver thing on the counter next to the glass ? A: i cannot tell for certain , but it may be a coffee decanter . 	0	20.566667000000002	20.566667000000002	[[0.471527]]	[[20.566667000000002]]	[1]	train	25
+00MFE	Q: does this look like a home kitchen or office kitchen ? A: it looks like a home kitchen to me . 	0	20.566667000000002	20.566667000000002	[[0.718792]]	[[20.566667000000002]]	[1]	train	26
+00MFE	Q: does she take a drink first or comb through her hair ? A: she takes a drink of water first . 	0	20.566667000000002	20.566667000000002	[[0.720254]]	[[11.276696]]	[1]	train	27
+00MFE	Q: is there anything else important i can 't see ? A: she picks up a broom and exits the room at the end . 	0	20.566667000000002	20.566667000000002	[[10.552607]]	[[20.566667000000002]]	[1]	train	28
+00MFE	Q: what are the sounds you hear ? A: i can hear some sort of background music , and the glass when she sets it on the countertop . 	0	20.566667000000002	20.566667000000002	[[1.439293]]	[[20.566667000000002]]	[1]	train	29
+00N38	Q: how many people is in the video ? A: just one person is shown 	0	24.536305	24.536305	[[0.631957]]	[[24.536305]]	[1]	train	30
+00N38	Q: what is he doing ? A: he is walking down the hallway undressing 	0	24.536305	24.536305	[[2.541002]]	[[9.576115]]	[1]	train	31
+00N38	Q: did he take off his shirt ? A: yea , but he had an undershirt 	0	24.536305	24.536305	[[4.0945]]	[[9.5884]]	[1]	train	32
+00N38	Q: where does he put his shirt ? A: he puts it onto the ground it appears 	0	24.536305	24.536305	[[9.232128]]	[[11.811355]]	[1]	train	33
+00N38	Q: what else does he do ? A: he throws more clothes onto the chair 	0	24.536305	24.536305	[[12.20781]]	[[14.462586]]	[1]	train	34
+00N38	Q: and what happen next ? A: he opened a door and walked through 	0	24.536305	24.536305	[[15.421348]]	[[24.536305]]	[1]	train	35
+00N38	Q: is that how the video end ? A: yes , that is how the video ends . 	0	24.536305	24.536305	[[21.171249]]	[[24.536305]]	[1]	train	36
+00N38	Q: does he show any emotions ? A: he shows very little emtion throughout 	0	24.536305	24.536305	[[2.622227]]	[[17.984702]]	[1]	train	37
+00N38	Q: does he talk or say anything ? A: he does not atlk or say antying 	0	24.536305	24.536305	[[2.685136]]	[[20.990791]]	[1]	train	38
+00N38	Q: so he is undressing in the hallway , put his clothes on the chair and then walk out from the video ? A: yes , that is exactly what he is doing . 	0	24.536305	24.536305	[[2.683136]]	[[21.405424]]	[1]	train	39
+00NN7	Q: how many people do you see ? A: you can see two , but one is in the background . 	0	30.663967	30.663967	[[0, 0, 10.785439]]	[[30.663967, 14.474218, 10.879949]]	[1]	train	40
+00NN7	Q: do you hear any sounds ? A: just some background noise is what you can hear . 	0	30.663967	30.663967	[[0]]	[[30.663967]]	[1]	train	41
+00NN7	Q: how old are the two people , do you think ? A: the one is a woman in her 30s , the other is child . 	0	30.663967	30.663967	[[0]]	[[30.663967]]	[1]	train	42
+00NN7	Q: what are they doing ? A: the boy is just sitting there , the woman comes in and puts a bag in a cabinet , sits down at a laptop to play solitar , then she closes a door . 	0	30.663967	30.663967	[[0]]	[[23.217034]]	[1]	train	43
+00NN7	Q: can you see if it 's day or night ? A: no , there isn 't any windows . 	0	30.663967	30.663967	[[0]]	[[30.663967]]	[1]	train	44
+00NN7	Q: can you hear any talking ? A: no one says a word in the video . 	0	30.663967	30.663967	[[19.395047]]	[[21.886198]]	[1]	train	45
+00NN7	Q: how many rooms do you see ? A: when she closed the door it was a hallway , but it is kind of one multiporpose room , kitchen and living room . 	0	30.663967	30.663967	[[0]]	[[30.663967]]	[1]	train	46
+00NN7	Q: does it look messy ? A: yes , very messy and unorganized . 	0	30.663967	30.663967	[[4.864753]]	[[7.18242]]	[1]	train	47
+00NN7	Q: does the video end with her closing the door ? A: yes , that is how it ends . 	0	30.663967	30.663967	[[22.925607]]	[[27.4913]]	[1]	train	48
+00NN7	Q: does the kid look bored ? A: you barley see him , the camera just flashed by him . 	0	30.663967	30.663967	[[10.601576]]	[[10.757264]]	[1]	train	49
+00SL4	Q: what is happening in beginning ? A: the video started with the view of a wooden closet as the guy approached . 	0	8.975633	8.975633	[[0.647816]]	[[8.975633]]	[1]	train	50
+00SL4	Q: what happens after he approaches ? A: he opened the closet and put what could be a blanket , a shirt or a towel inside . 	0	8.975633	8.975633	[[2.773834]]	[[8.975633]]	[1]	train	51
+00SL4	Q: does he take anything from closet ? A: no , he closed the closet after that . 	0	8.975633	8.975633	[[2.699565]]	[[8.975633]]	[1]	train	52
+00SL4	Q: does he do anything after he closes closet ? A: that was when the video cut . 	0	8.975633	8.975633	[[2.288472]]	[[8.975633]]	[1]	train	53
+00SL4	Q: what color is the blanket ? A: it was not clear . it could be brown with some ornaments . 	0	8.975633	8.975633	[[3.43225]]	[[8.975633]]	[1]	train	54
+00SL4	Q: does he say anything in video ? A: no , he did not say anything . 	0	8.975633	8.975633	[[0]]	[[8.975633]]	[1]	train	55
+00SL4	Q: do you hear any noises at all ? A: the only noise that can be heard was from the opening and closing of the closet . 	0	8.975633	8.975633	[[3.182223]]	[[8.975633]]	[1]	train	56
+00SL4	Q: can you tell what room the closet is in ? A: this could be a bedroom . 	0	8.975633	8.975633	[[0]]	[[8.975633]]	[1]	train	57
+00SL4	Q: does it look like a light is on ? A: i could not see the light , but the room looked bright . 	0	8.975633	8.975633	[[0]]	[[8.975633]]	[1]	train	58
+00SL4	Q: is there anything else i should know ? A: there were some clothes that were hanged and few unclear objects . 	0	8.975633	8.975633	[[0]]	[[8.975633]]	[1]	train	59
+00T4B	Q: what is the woman doing in the kitchen ? A: she is removing a lid on the pot and stirring the contents 	0	20.186833	20.186833	[[0]]	[[6.323512]]	[1]	train	60
+00T4B	Q: after she stirs the pot what does she do ? A: she walks over to the front door and puts her shoes on and just stands there 	0	20.186833	20.186833	[[6.784335, 8.679073]]	[[8.679073, 20.186833]]	[1]	train	61
+00T4B	Q: does she ever go out the door ? A: no , she just stands there 	0	20.186833	20.186833	[[11.034145]]	[[20.186833]]	[1]	train	62
+00T4B	Q: does she take her shoes off or were they all ready off ? A: no , she puts her shoes on 	0	20.186833	20.186833	[[12.775031]]	[[20.186833]]	[1]	train	63
+00T4B	Q: where is she at when she puts her shoes on ? A: she is standing in front of the door 	0	20.186833	20.186833	[[12.467816]]	[[20.186833]]	[1]	train	64
+00T4B	Q: does she sit down to put her shoes on ? A: no she is standing when she puts them on 	0	20.186833	20.186833	[[12.672626]]	[[20.186833]]	[1]	train	65
+00T4B	Q: does she make any noise in the video ? A: just with the things she is doing , but she isn 't talking 	0	20.186833	20.186833	[[0.640031, 14.412712]]	[[8.627626, 17.612414]]	[1]	train	66
+00T4B	Q: does she sneeze or cough ? A: no she does not sneeze or cough 	0	20.186833	20.186833	[[0]]	[[20.186833]]	[1]	train	67
+00T4B	Q: so the woman stirs some food on a stove then goes to a door and puts on her shoes ? A: yes thats pretty much it 	0	20.186833	20.186833	[[0]]	[[20.186833]]	[1]	train	68
+00T4B	Q: is there anything we haven 't touched on yet ? A: no , thats all that happens 	0	20.186833	20.186833	[[0]]	[[20.186833]]	[1]	train	69
+00X3U	Q: is there a person in the video ? A: yes there is one woman in the video . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	70
+00X3U	Q: does anyone else come into the video ? A: no other person is in this video . its just the woman . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	71
+00X3U	Q: is she in a closet ? A: yes she is trying to retrieve something from there . 	0	21.12	21.12	[[0]]	[[17.765399]]	[1]	train	72
+00X3U	Q: does she have clothes in her hands ? A: she manages to find what she is looking for and picks up a blanket . 	0	21.12	21.12	[[11.890063]]	[[20.760581]]	[1]	train	73
+00X3U	Q: does she ever leave the room ? A: yes she does exit the closet and runs towards the other room . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	74
+00X3U	Q: does anyone else come into the video ? A: no one else comes into the video . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	75
+00X3U	Q: is she wearing an orange shirt ? A: yes she does wear an orange shirt . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	76
+00X3U	Q: is there anything else significant that she does ? A: no . she just picks up a blanket from the closet and shuts it behind her when she leaves and runs towards the other room . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	77
+00X3U	Q: does the video begin with her in the closet ? A: the video starts with her entering the closet . 	0	21.12	21.12	[[0]]	[[9.990147]]	[1]	train	78
+00X3U	Q: does she have a basket in her hands ? A: yes she does after she picks it up from the closet . 	0	21.12	21.12	[[0]]	[[21.12]]	[1]	train	79
+00YZL	Q: is the man cooking on the stove ? A: he isn 't cooking . he just grabs stuff off of the counter . 	0	33.208333	33.208333	[[3.207756]]	[[12.165744]]	[1]	train	80
+00YZL	Q: did he just walk into the kitchen ? A: no . he 's already standing there when the video starts . 	0	33.208333	33.208333	[[1.029189]]	[[5.437182]]	[1]	train	81
+00YZL	Q: does he take anything off the counter ? A: he takes a piece of bread and then a cup of something . 	0	33.208333	33.208333	[[3.682445]]	[[10.655757]]	[1]	train	82
+00YZL	Q: does he drink or eat at all ? A: yes . he takes a bite out of the bread and then takes a couple of sips from the cup . 	0	33.208333	33.208333	[[1.230418]]	[[19.332648]]	[1]	train	83
+00YZL	Q: does the man open any cuboards ? A: he opens the fridge after drinking from the cup and taking another bite out of the bread . 	0	33.208333	33.208333	[[20.439706]]	[[33.208333]]	[1]	train	84
+00YZL	Q: does he take anything out of the fridge ? A: no . he puts both the bread and the cup in the fridge . 	0	33.208333	33.208333	[[20.115729]]	[[32.923974]]	[1]	train	85
+00YZL	Q: is there any magnets on the fridge ? A: yes . there are magnets holding different papers . 	0	33.208333	33.208333	[[24.173]]	[[33.208333]]	[1]	train	86
+00YZL	Q: how old is the man in the video ? A: i would guess early twenties . 	0	33.208333	33.208333	[[0.797623]]	[[10.000335]]	[1]	train	87
+00YZL	Q: what is the man wearing ? A: he 's wearing a hoodie and pants . 	0	33.208333	33.208333	[[2.024647]]	[[10.464116]]	[1]	train	88
+00YZL	Q: is there any audio in the video ? A: the only sound you can hear is the refrigerator door squeaking when he closes it . 	0	33.208333	33.208333	[[24.683962]]	[[33.208333]]	[1]	train	89
+00ZCA	Q: is there more than one person ? A: yes , two people appear in the video . 	0	92.924791	92.924791	[[19.596497]]	[[20.314611]]	[1]	train	90
+00ZCA	Q: what is the first thing the man does ? A: he comes into the room and takes the chairs away from the counter . 	0	92.924791	92.924791	[[0.93715]]	[[8.500651]]	[1]	train	91
+00ZCA	Q: what does the other person do ? A: they are just in the kitchen . it is a woman . 	0	92.924791	92.924791	[[20.058976]]	[[30.756416]]	[1]	train	92
+00ZCA	Q: what does he do next after moving chairs ? A: he then goes to a closet nearby and grabs a vaccumm . 	0	92.924791	92.924791	[[10.884827]]	[[18.384184]]	[1]	train	93
+00ZCA	Q: what is everything the woman does in the video ? A: she goes to a cabinet and takes something out and puts it on the counter . then she leaves the room again . she only appears for a few seconds . 	0	92.924791	92.924791	[[20.191033]]	[[33.446371]]	[1]	train	94
+00ZCA	Q: does he turn on the vacuum and do the floor ? A: yes , he vaccums under the counter only . 	0	92.924791	92.924791	[[28.391293]]	[[63.532642]]	[1]	train	95
+00ZCA	Q: do you think the actions of the second person are important ? A: not really . the first person does a lot in this video . 	0	92.924791	92.924791	[[19.879299]]	[[30.517006]]	[1]	train	96
+00ZCA	Q: does he do anything after that ? A: he then takes a duster and cleans the counter and the celing . 	0	92.924791	92.924791	[[66.654421]]	[[92.131618]]	[1]	train	97
+00ZCA	Q: how does he reach the ceiling ? A: the ceiling is low and he is tall . 	0	92.924791	92.924791	[[81.76367]]	[[92.924791]]	[1]	train	98
+00ZCA	Q: anything else that is important that i need to know ? A: no . that is all that happens in this video . 	0	92.924791	92.924791	[[1.447841]]	[[92.924791]]	[1]	train	99

@@ -278,7 +278,6 @@ class AVSD10Dataset(Dataset):
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.phase = phase
-        self.shrank = cfg.shrank
         self.get_full_feat = get_full_feat
 
         if phase == 'train':

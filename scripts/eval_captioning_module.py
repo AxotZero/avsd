@@ -24,7 +24,7 @@ def eval_cap_helper(cfg, test_pkl, dstc=7):
         cfg.reference_paths = ['./data/test_set4DSTC10-AVSD_multiref+reason.json']
         cfg.test_meta_path = './data/dstc10_test.csv'
 
-    # cfg.last_only=True
+    cfg.last_only=True
     cfg.pretrained_cap_model_path= f'{cfg.log_dir}/{cfg.exp_name}/best_cap_model.pt'
     
     cfg.unfreeze_word_emb = False
@@ -82,7 +82,7 @@ def eval_cap(cfg):
     # eval_cap_helper(cfg, test_pkl, dstc=10)
 
     cfg.decoding_method = 'beam_search'
-    # eval_cap_helper(cfg, test_pkl, dstc=7)
+    eval_cap_helper(cfg, test_pkl, dstc=7)
     # eval_cap_helper(cfg, test_pkl, dstc=8)
     eval_cap_helper(cfg, test_pkl, dstc=10)
 

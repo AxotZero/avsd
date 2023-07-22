@@ -1,0 +1,21 @@
+video_id	dialog	start	end	duration	seq_start	seq_end	tan_mask	phase	idx
+00607	Q: what is the video about ? A: a man dusting in his kitchen 	0	32.84013	32.84013	[[0.599395]]	[[32.84013]]	[1]	val	0
+00607	Q: dusing with a dish cloth ? A: yes , an orange dish cloth 	0	32.84013	32.84013	[[1.204272]]	[[32.84013]]	[1]	val	1
+00607	Q: what area is he dusting ? A: it looks like a kitchen to me 	0	32.84013	32.84013	[[1.16604]]	[[32.84013]]	[1]	val	2
+00607	Q: what else do i need to know ? A: the kitchen looks so tidy 	0	32.84013	32.84013	[[0.70299]]	[[32.84013]]	[1]	val	3
+00607	Q: is he dusting a certain area like the countertop or table ? A: yes he is dusting a microwave 	0	32.84013	32.84013	[[1.175699]]	[[32.84013]]	[1]	val	4
+00607	Q: did he enter or leave the room ? A: he enters and goes to another room 	0	32.84013	32.84013	[[1.58815]]	[[32.84013]]	[1]	val	5
+00607	Q: any other things i need to know ? A: no , the floor is clean too 	0	32.84013	32.84013	[[23.677249]]	[[32.84013]]	[1]	val	6
+00607	Q: is he a young man alone ? A: yes , completely alone in the room 	0	32.84013	32.84013	[[0.735814]]	[[32.84013]]	[1]	val	7
+00607	Q: does he enter kitchen and grab a dish towel from where ? A: he comes in with the dish towel 	0	32.84013	32.84013	[[1.124555]]	[[32.84013]]	[1]	val	8
+00607	Q: is the microwave the only thing he dusts ? A: no , he dusts all the cookery in the house 	0	32.84013	32.84013	[[0]]	[[32.84013]]	[1]	val	9
+00T1E	Q: 1 . what is the main activity of the video ? A: a man is laying in bed watching something on his computer . 	0	19.10828	19.10828	[[1.44153]]	[[5.233609]]	[1]	val	10
+00T1E	Q: is he indian ? A: yes i think he looks indian . 	0	19.10828	19.10828	[[0.976101]]	[[19.10828]]	[1]	val	11
+00T1E	Q: what kind of computer is he using ? A: it 's a labtop but i don 't know what kind . 	0	19.10828	19.10828	[[1.043376]]	[[5.67347]]	[1]	val	12
+00T1E	Q: does he laugh ? A: no he is not laughing . 	0	19.10828	19.10828	[[1.117872]]	[[19.10828]]	[1]	val	13
+00T1E	Q: does he open the blinds ? A: no he does not open the blind . 	0	19.10828	19.10828	[[1.247113]]	[[19.10828]]	[1]	val	14
+00T1E	Q: is he in a studio apartment ? A: it does not look like he 's in a studio apartment . 	0	19.10828	19.10828	[[0.557909]]	[[19.10828]]	[1]	val	15
+00T1E	Q: does it look like this video is set in india ? A: i know it 's an indian person but i don 't know the location of where the video was taken . 	0	19.10828	19.10828	[[1.16473]]	[[19.10828]]	[1]	val	16
+00T1E	Q: does he do anything else while on the bed ? A: no after he watches the video he get up and walk out of the room ? 	0	19.10828	19.10828	[[1.13137]]	[[19.10828]]	[1]	val	17
+00T1E	Q: what material is the floor ? A: the floor looks like its plywood . 	0	19.10828	19.10828	[[0.73112]]	[[19.10828]]	[1]	val	18
+00T1E	Q: how long does he sit on his bed ? A: he sits on the bed about 15 seconds . 	0	19.10828	19.10828	[[1.083959]]	[[14.098835]]	[1]	val	19
