@@ -2,7 +2,6 @@
 # import sys
 # import os
 # # print(os.getcwd())
-# # sys.path.append(os.path.abspath("/media/hd03/axot_data/AVSD-DSTC10_baseline/model"))
 from pdb import set_trace as bp
 import torch
 import torch.nn as nn

@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-DATA_DIR = '/datatank/axot_data/avsd/data'
-FEAT_DIR = f'{DATA_DIR}/features'
+DATA_DIR = './data'
+FEAT_DIR = f'./data/features'
 random.seed(2626)
 
 def save_pickle(dic, save_path, protocol=4):
