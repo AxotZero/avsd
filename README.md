@@ -1,6 +1,5 @@
 # 2D-MapFormer
-![image](https://github.com/AxotZero/avsd/assets/41388159/39959d8c-e6f6-4a4b-8fb5-6b5ec3ed9c53)
-
+![image](https://github.com/AxotZero/avsd/blob/main/assets/model_overview.png)
 
 Source Code for my master thesis **"2D-MapFormer: 2D-Map Transformer for Audio-Visual Scene-Aware Dialogue and Reasoning"** (Currently not published).
 
@@ -56,20 +55,20 @@ The Source Code is derived from
 
 ## Model Architecture
 
-| ![image](https://github.com/AxotZero/avsd/assets/41388159/39959d8c-e6f6-4a4b-8fb5-6b5ec3ed9c53) | 
+| ![image](https://github.com/AxotZero/avsd/blob/main/assets/model_overview.png) | 
 |:--:| 
 | Model Overview|
 
-|![image](https://github.com/AxotZero/avsd/assets/41388159/5198839e-f96d-4d56-9fae-555c297b5eba)| 
+|![image](https://github.com/AxotZero/avsd/blob/main/assets/av_encoder.png)| 
 |:--:| 
 | Audio Visual Encoder|
 
-| ![image](https://github.com/AxotZero/avsd/assets/41388159/efd7e99b-5d75-46fd-b2dc-a1d6a89d2a9e)| 
+| ![image](https://github.com/AxotZero/avsd/blob/main/assets/sentence_cross_attention.png)| 
 |:--:| 
 | Sentence Cross Attention|
 
 
-| ![image](https://github.com/AxotZero/avsd/assets/41388159/0ddbc65e-690a-488f-9e4e-f73a6f072eca)| 
+| ![image](https://github.com/AxotZero/avsd/blob/main/assets/update_gate.png)| 
 |:--:| 
 | Update Gate|
 
