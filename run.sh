@@ -43,6 +43,7 @@ one_by_one_starts_at=200
 ## decoding_method
 #decoding_method='greedy'
 # decoding_method='topk_topp'
+#### 太穩了 !!!!
 decoding_method='beam_search'
 beam_size=5
 length_penalty=0.9
@@ -66,7 +67,7 @@ log_dir=./log
 # convert data
 echo "Coverting json files to csv for the tool"
 generate_csv='utils/generate_previous_csv.py'
-num_prev=0
+num_prev=0 #### 調上去就變爛
 python $generate_csv duration_info/duration_Charades_v1_480.csv $train_set train ./data/dstc10_train.csv $num_prev
 python $generate_csv duration_info/duration_Charades_v1_480.csv $val_set val ./data/dstc10_val.csv $num_prev
 python $generate_csv duration_info/duration_Charades_vu17_test_480.csv $test_set test ./data/dstc10_test.csv $num_prev

@@ -37,7 +37,7 @@ class AVSDTan(nn.Module):
             self.av_fusion = AVMapping(cfg)
         else:
             self.av_fusion = AVFusion(cfg)
-        self.tan = TAN(cfg)
+        self.tan = TAN(cfg) # generate 2d map
 
         self.cross_decoder = CrossDecoder(cfg)
 
@@ -45,7 +45,7 @@ class AVSDTan(nn.Module):
         # self.generator = GruGenerator(cfg, vocab_size)
 
 
-        self.sim_loss = ContrasitiveLoss()
+        # self.sim_loss = ContrasitiveLoss()
         self.tan_loss = TanLoss(cfg.min_iou, cfg.max_iou)
         self.gen_loss = LabelSmoothing(cfg.smoothing, self.pad_idx, self.cls_idx)
 
